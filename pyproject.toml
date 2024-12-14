@@ -1,0 +1,26 @@
+[project]
+name = "optim-hunter"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "transformer-lens>=2.10.0",
+    "einops>=0.8.0",
+    "torch>=2.5.1",
+    "jaxtyping>=0.2.36",
+    "circuitsvis",
+    "jupyter>=1.1.1",
+    "neel-plotly",
+    "plotly>=5.24.1",
+    "scikit-learn>=1.6.0",
+    "sentencepiece>=0.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+circuitsvis = { git = "https://github.com/callummcdougall/CircuitsVis.git", subdirectory = "python" }
+neel-plotly = { git = "https://github.com/neelnanda-io/neel-plotly" }
