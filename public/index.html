@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logit Lens Comparison Plots</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .plot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .plot-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .plot-container h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            color: #444;
+        }
+
+        iframe {
+            width: 100%;
+            height: 500px;
+            border: none;
+        }
+
+        @media (max-width: 768px) {
+            .plot-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Logit Lens Comparison Plots</h1>
+        <div class="plot-grid">
+            <div class="plot-container">
+                <h2>Gold vs Linear Regression</h2>
+                <iframe src="logit_lens_gold_vs_linear_regression.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Gold vs KNN Regression</h2>
+                <iframe src="logit_lens_gold_vs_knn_regression.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Gold vs Random Forest</h2>
+                <iframe src="logit_lens_gold_vs_random_forest.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Gold vs Baseline Average</h2>
+                <iframe src="logit_lens_gold_vs_baseline_average.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Gold vs Baseline Last</h2>
+                <iframe src="logit_lens_gold_vs_baseline_last.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Gold vs Baseline Random</h2>
+                <iframe src="logit_lens_gold_vs_baseline_random.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Linear Regression vs KNN Regression</h2>
+                <iframe src="logit_lens_linear_regression_vs_knn_regression.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Linear Regression vs Random Forest</h2>
+                <iframe src="logit_lens_linear_regression_vs_random_forest.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Linear Regression vs Baseline Average</h2>
+                <iframe src="logit_lens_linear_regression_vs_baseline_average.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Linear Regression vs Baseline Last</h2>
+                <iframe src="logit_lens_linear_regression_vs_baseline_last.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Linear Regression vs Baseline Random</h2>
+                <iframe src="logit_lens_linear_regression_vs_baseline_random.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>KNN Regression vs Random Forest</h2>
+                <iframe src="logit_lens_knn_regression_vs_random_forest.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>KNN Regression vs Baseline Average</h2>
+                <iframe src="logit_lens_knn_regression_vs_baseline_average.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>KNN Regression vs Baseline Last</h2>
+                <iframe src="logit_lens_knn_regression_vs_baseline_last.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>KNN Regression vs Baseline Random</h2>
+                <iframe src="logit_lens_knn_regression_vs_baseline_random.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Random Forest vs Baseline Average</h2>
+                <iframe src="logit_lens_random_forest_vs_baseline_average.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Random Forest vs Baseline Last</h2>
+                <iframe src="logit_lens_random_forest_vs_baseline_last.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Random Forest vs Baseline Random</h2>
+                <iframe src="logit_lens_random_forest_vs_baseline_random.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Baseline Average vs Baseline Last</h2>
+                <iframe src="logit_lens_baseline_average_vs_baseline_last.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Baseline Average vs Baseline Random</h2>
+                <iframe src="logit_lens_baseline_average_vs_baseline_random.html"></iframe>
+            </div>
+            <div class="plot-container">
+                <h2>Baseline Last vs Baseline Random</h2>
+                <iframe src="logit_lens_baseline_last_vs_baseline_random.html"></iframe>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
