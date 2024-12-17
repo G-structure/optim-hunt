@@ -512,27 +512,55 @@ def spline_regression(x_train, x_test, y_train, y_test, random_state=1, **kwargs
         'y_predict' : y_predict,
     }
 
-
-def baseline(x_train, x_test, y_train, y_test, baseline_type, random_state=1, **kwargs):
-    r = random.Random(random_state)
-    if baseline_type == "average":
-        pred   = np.mean(y_train)
-        y_predict = np.array([pred for _ in y_test])
-    elif baseline_type == "last":
-        pred   = y_train.to_list()[-1]
-        y_predict = np.array([pred for _ in y_test])
-    elif baseline_type == "random":
-        y_train_list = y_train.to_list()
-        y_predict     = np.array([r.choice(y_train_list) for _ in y_test])
-    elif baseline_type == 'constant_prediction':
-        y_predict = np.array([kwargs['constant_prediction_value'] for _ in y_test])
-    else:
-        raise ValueError(f"Unknown {baseline_type}")
-
-    y_test    = y_test.to_numpy()
+def baseline_average(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
+    pred = np.mean(y_train)
+    y_predict = np.array([pred for _ in y_test])
+    y_test = y_test.to_numpy()
 
     return {
-        'model_name': baseline_type,
+        'model_name': 'average',
+        'x_train'   : x_train,
+        'x_test'    : x_test,
+        'y_train'   : y_train,
+        'y_test'    : y_test,
+        'y_predict' : y_predict,
+    }
+
+def baseline_last(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
+    pred = y_train.to_list()[-1]
+    y_predict = np.array([pred for _ in y_test])
+    y_test = y_test.to_numpy()
+
+    return {
+        'model_name': 'last',
+        'x_train'   : x_train,
+        'x_test'    : x_test,
+        'y_train'   : y_train,
+        'y_test'    : y_test,
+        'y_predict' : y_predict,
+    }
+
+def baseline_random(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
+    r = random.Random(random_state)
+    y_train_list = y_train.to_list()
+    y_predict = np.array([r.choice(y_train_list) for _ in y_test])
+    y_test = y_test.to_numpy()
+
+    return {
+        'model_name': 'random',
+        'x_train'   : x_train,
+        'x_test'    : x_test,
+        'y_train'   : y_train,
+        'y_test'    : y_test,
+        'y_predict' : y_predict,
+    }
+
+def baseline_constant(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
+    y_predict = np.array([kwargs['constant_prediction_value'] for _ in y_test])
+    y_test = y_test.to_numpy()
+
+    return {
+        'model_name': 'constant_prediction',
         'x_train'   : x_train,
         'x_test'    : x_test,
         'y_train'   : y_train,
