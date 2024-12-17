@@ -9,3 +9,6 @@ git clone git@hf.co:meta-llama/Llama-3.1-8B-Instruct
 Interesting heads:
 layer 9 head 30
 layer 13 head 22
+
+## Plots
+https://g-structure.github.io/optim-hunt/
