@@ -17,7 +17,8 @@ def get_theme_sync_js():
                         'yaxis.gridcolor': '#93a1a1',
                         'xaxis.color': '#073642',
                         'yaxis.color': '#073642',
-                        'title.font.color': '#073642'
+                        'title.font.color': '#073642',
+                        'autosize': true
                     });
                     Plotly.restyle(plotDiv, {
                         'line.color': '#2075c7',
@@ -32,7 +33,8 @@ def get_theme_sync_js():
                         'yaxis.gridcolor': '#444',
                         'xaxis.color': '#e0e0e0',
                         'yaxis.color': '#e0e0e0',
-                        'title.font.color': '#e0e0e0'
+                        'title.font.color': '#e0e0e0',
+                        'autosize': true
                     });
                     Plotly.restyle(plotDiv, {
                         'line.color': '#9ec5fe',
@@ -40,32 +42,48 @@ def get_theme_sync_js():
                         'marker.line.color': '#1a1a1a'
                     });
                 }
+                
+                // Force a resize after theme update
+                window.dispatchEvent(new Event('resize'));
+                
             } catch (e) {
                 console.error('Error updating plot theme:', e);
             }
         }
 
-    // In template.html, modify the theme change handler
-    function updateAllPlots() {
-        // Debounce the update
-        if (window.plotUpdateTimeout) {
-            clearTimeout(window.plotUpdateTimeout);
-        }
-        
-        window.plotUpdateTimeout = setTimeout(() => {
-            const isLight = document.body.classList.contains('light-theme');
-            const plots = document.querySelectorAll('.plotly-graph-div');
-            
-            // Update plots in batches
-            const batchSize = 3;
-            for (let i = 0; i < plots.length; i += batchSize) {
-                setTimeout(() => {
-                    const batch = Array.from(plots).slice(i, i + batchSize);
-                    batch.forEach(plot => updatePlotTheme(plot, isLight));
-                }, Math.floor(i/batchSize) * 100);
+        // In template.html, modify the theme change handler
+        function updateAllPlots() {
+            // Debounce the update
+            if (window.plotUpdateTimeout) {
+                clearTimeout(window.plotUpdateTimeout);
             }
-        }, 250);
-    }
+            
+            window.plotUpdateTimeout = setTimeout(() => {
+                const isLight = document.body.classList.contains('light-theme');
+                const plots = document.querySelectorAll('.plotly-graph-div');
+                
+                // Update plots in batches
+                const batchSize = 3;
+                for (let i = 0; i < plots.length; i += batchSize) {
+                    setTimeout(() => {
+                        const batch = Array.from(plots).slice(i, i + batchSize);
+                        batch.forEach(plot => updatePlotTheme(plot, isLight));
+                    }, Math.floor(i/batchSize) * 100);
+                }
+            }, 250);
+        }
+
+        // Add resize handler with debouncing
+        window.addEventListener('resize', function() {
+            if (window.resizeTimeout) {
+                clearTimeout(window.resizeTimeout);
+            }
+            window.resizeTimeout = setTimeout(function() {
+                document.querySelectorAll('.plotly-graph-div').forEach(function(plot) {
+                    Plotly.Plots.resize(plot);
+                });
+            }, 250);
+        });
 
         // Wait for Plotly to be fully loaded
         function ensurePlotly() {
@@ -79,6 +97,9 @@ def get_theme_sync_js():
                     console.log('Theme changed event received');
                     updateAllPlots();
                 });
+
+                // Initial resize to ensure proper dimensions
+                window.dispatchEvent(new Event('resize'));
             } else {
                 console.log('Waiting for Plotly...');
                 setTimeout(ensurePlotly, 100);
@@ -134,7 +155,7 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
     layout = go.Layout(
         plot_bgcolor='rgba(26,26,26,0)',
         paper_bgcolor='rgba(26,26,26,0)',
-        margin=dict(l=50, r=20, t=50, b=50),
+        margin=dict(l=50, r=20, t=50, b=50, pad=4),
         xaxis=dict(
             title='Layer',
             gridcolor='#444',
@@ -166,8 +187,7 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
             font_size=12,
             font_family="monospace"
         ),
-        width=600,
-        height=400
+        autosize=True
     )
 
     # Create figure
@@ -175,16 +195,20 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
 
     config = {
         'displayModeBar': False,
-        'staticPlot': False,  # Makes plot non-interactive but much lighter
-        'responsive': False,  # Disable responsiveness for faster rendering
+        'staticPlot': False,
+        'responsive': True,  # Enable responsiveness
     }
     
     # Generate plot HTML with controlled script inclusion
-    plot_html = fig.to_html(
-        full_html=False,
-        include_plotlyjs='cdn' if include_plotlyjs else False,
-        config=config
-    )
+    plot_html = f"""
+    <div class="plot-container">
+        {fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if include_plotlyjs else False,
+            config=config
+        )}
+    </div>
+    """
     
     # Add theme sync JavaScript if requested
     if include_theme_js:
