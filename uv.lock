@@ -1688,7 +1688,7 @@ requires-dist = [
     { name = "plotly", specifier = ">=5.24.1" },
     { name = "scikit-learn", specifier = ">=1.6.0" },
     { name = "sentencepiece", specifier = ">=0.2.0" },
-    { name = "torch", specifier = "==2.1.1" },
+    { name = "torch", specifier = ">=2.0.0" },
     { name = "transformer-lens", specifier = ">=2.10.0" },
 ]
 

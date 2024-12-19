@@ -1,0 +1,374 @@
+<html>
+    <head>
+        <base href="https://gwern.net" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Transformer Circuits and Attention Patterns</title>
+
+        <!-- Adding MathJax for equation rendering -->
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script
+            id="MathJax-script"
+            async
+            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+        ></script>
+
+        <script>
+            window.MathJax = {
+                tex: {
+                    inlineMath: [
+                        ["$", "$"],
+                        ["\\(", "\\)"],
+                    ],
+                    displayMath: [
+                        ["$$", "$$"],
+                        ["\\[", "\\]"],
+                    ],
+                    processEscapes: true,
+                    processEnvironments: true,
+                },
+                options: {
+                    skipHtml: false,
+                    processHtml: true,
+                },
+            };
+        </script>
+
+        <style>
+            :root {
+                /* Dark theme - slight tweaks to existing */
+                --primary-color: #1a1a1a;
+                --secondary-color: #333;
+                --text-color: #e0e0e0;
+                --link-color: #9ec5fe;
+                --border-color: #444;
+
+                /* Light theme - custom solarized-inspired */
+                --primary-color-light: #fdf6e3;
+                --secondary-color-light: #eee8d5;
+                --text-color-light: #073642;
+                --link-color-light: #2075c7;
+                --border-color-light: #93a1a1;
+            }
+
+            body {
+                font-family: "Linux Libertine", Georgia, serif;
+                background: var(--primary-color);
+                color: var(--text-color);
+                line-height: 1.6;
+                margin: 0;
+                padding: 20px;
+                transition: all 0.2s ease;
+            }
+
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+
+            header {
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 20px;
+                margin-bottom: 40px;
+                transition: all 0.2s ease;
+            }
+
+            h1 {
+                font-size: 2.5em;
+                font-weight: normal;
+                margin: 0;
+            }
+
+            .metadata {
+                color: #888;
+                font-style: italic;
+                margin-top: 10px;
+            }
+
+            .content {
+                font-size: 1.1em;
+            }
+
+            a {
+                color: var(--link-color);
+                text-decoration: none;
+                border-bottom: 1px dotted var(--link-color);
+                transition: all 0.2s ease;
+            }
+
+            a:hover {
+                border-bottom: 1px solid var(--link-color);
+            }
+
+            .sidenote {
+                float: right;
+                clear: right;
+                margin-right: -200px;
+                width: 180px;
+                font-size: 0.9em;
+                color: #888;
+                margin-top: 0.3em;
+                padding-left: 20px;
+                transition: all 0.2s ease;
+            }
+
+            .footnotes {
+                border-top: 1px solid var(--border-color);
+                margin-top: 40px;
+                padding-top: 20px;
+                transition: border-color 0.2s ease;
+            }
+
+            .dark-mode-toggle {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                width: 40px;
+                height: 40px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            .moon {
+                fill: none;
+                stroke: var(--text-color);
+                stroke-width: 2;
+                transition: all 0.2s ease;
+            }
+
+            .viz-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-top: 20px;
+            }
+
+            @media (max-width: 1200px) {
+                .sidenote {
+                    float: none;
+                    margin: 20px 0;
+                    width: auto;
+                    padding: 10px;
+                    background: var(--secondary-color);
+                    border-radius: 4px;
+                }
+            }
+
+            /* Light theme specific overrides */
+            body.light-theme {
+                background: var(--primary-color-light);
+                color: var(--text-color-light);
+            }
+
+            .light-theme header {
+                border-bottom-color: var(--border-color-light);
+            }
+
+            .light-theme a {
+                color: var(--link-color-light);
+                border-bottom-color: var(--link-color-light);
+            }
+
+            .light-theme .circuits-viz {
+                background: var(--secondary-color-light);
+            }
+
+            .light-theme .attention-cell {
+                background: var(--link-color-light);
+            }
+
+            .light-theme .moon {
+                stroke: var(--text-color-light);
+            }
+
+            .light-theme .sidenote {
+                color: var(--text-color-light);
+                opacity: 0.8; /* Slightly dimmed to distinguish from main text */
+            }
+
+            .light-theme .metadata {
+                color: var(--text-color-light);
+                opacity: 0.7;
+            }
+
+            /* Adding styles for math equations */
+            .equation-block {
+                padding: 20px;
+                margin: 20px 0;
+                overflow-x: auto;
+                background: var(--secondary-color);
+                border-radius: 8px;
+                transition: all 0.2s ease;
+            }
+
+            .light-theme .equation-block {
+                background: var(--secondary-color-light);
+            }
+
+            .equation-label {
+                color: #888;
+                float: right;
+                font-style: italic;
+            }
+
+            .light-theme .equation-label {
+                color: var(--text-color-light);
+                opacity: 0.7;
+            }
+
+            /* Fix media query for sidenote in light theme */
+            @media (max-width: 1200px) {
+                .light-theme .sidenote {
+                    background: var(--secondary-color-light);
+                    color: var(--text-color-light);
+                    opacity: 0.8;
+                    border-radius: 4px;
+                }
+            }
+
+            /* New styles for code blocks */
+            .code-block {
+                margin: 20px 0;
+                padding: 20px;
+                border-radius: 8px;
+                font-family: "Fira Code", "Consolas", monospace;
+                font-size: 0.9em;
+                line-height: 1.5;
+                overflow-x: auto;
+                background: #282c34;
+                color: #abb2bf;
+                border: 1px solid var(--border-color);
+                transition: all 0.2s ease;
+            }
+
+            .light-theme .code-block {
+                background: #fdf6e3; /* Solarized Light background */
+                color: #657b83; /* Solarized Light default text */
+                border-color: var(--border-color-light);
+            }
+
+            /* Syntax highlighting for dark theme */
+            .code-block .keyword {
+                color: #c678dd;
+            }
+            .code-block .string {
+                color: #98c379;
+            }
+            .code-block .comment {
+                color: #5c6370;
+                font-style: italic;
+            }
+            .code-block .number {
+                color: #d19a66;
+            }
+            .code-block .function {
+                color: #61afef;
+            }
+            .code-block .operator {
+                color: #56b6c2;
+            }
+
+            /* Syntax highlighting for light theme (Solarized Light inspired) */
+            .light-theme .code-block .keyword {
+                color: #859900;
+            }
+            .light-theme .code-block .string {
+                color: #2aa198;
+            }
+            .light-theme .code-block .comment {
+                color: #93a1a1;
+                font-style: italic;
+            }
+            .light-theme .code-block .number {
+                color: #cb4b16;
+            }
+            .light-theme .code-block .function {
+                color: #268bd2;
+            }
+            .light-theme .code-block .operator {
+                color: #6c71c4;
+            }
+
+            .mjx-math {
+                color: var(--text-color);
+            }
+
+            .light-theme .mjx-math {
+                color: var(--text-color-light);
+            }
+
+            .mjx-math.MJX-TEX {
+                font-size: 1.1em;
+                vertical-align: middle;
+            }
+
+            p .mjx-chtml {
+                display: inline-block;
+                line-height: 0;
+                text-indent: 0;
+                text-align: left;
+                text-transform: none;
+                font-style: normal;
+                font-weight: normal;
+                font-size: 100%;
+                font-size-adjust: none;
+                letter-spacing: normal;
+                word-wrap: normal;
+                word-spacing: normal;
+                white-space: nowrap;
+                float: none;
+                direction: ltr;
+                max-width: none;
+                max-height: none;
+                min-width: 0;
+                min-height: 0;
+                border: 0;
+                margin: 0;
+                padding: 1px 0;
+                vertical-align: middle;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>{{TITLE}}</h1>
+                <div class="metadata">
+                    Updated: {{DATE}} | Reading time: {{READING_TIME}}
+                </div>
+            </header>
+
+            <div class="content">{{CONTENT}}</div>
+        </div>
+
+        <svg class="dark-mode-toggle" viewBox="0 0 24 24">
+            <path
+                class="moon"
+                d="M21 12.79A9 9 0 1 1 11.21 3 A7 7 0 0 0 21 12.79z"
+            ></path>
+        </svg>
+
+        <script>
+            document.querySelectorAll("a").forEach((link) => {
+                link.addEventListener("click", (e) => {
+                    const href = e.currentTarget.getAttribute("href");
+                    if (href && href.startsWith("https://www.gwern.net")) {
+                        e.preventDefault();
+                        console.log(
+                            `Navigation to ${href} prevented in this demo`,
+                        );
+                    }
+                });
+            });
+
+            const toggle = document.querySelector(".dark-mode-toggle");
+            let isDark = true;
+
+            toggle.addEventListener("click", () => {
+                isDark = !isDark;
+                document.body.classList.toggle("light-theme");
+                toggle.style.transform = `rotate(${isDark ? 0 : 180}deg)`;
+            });
+        </script>
+    </body>
+</html>
