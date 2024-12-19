@@ -354,9 +354,7 @@
                     const href = e.currentTarget.getAttribute("href");
                     if (href && href.startsWith("https://www.gwern.net")) {
                         e.preventDefault();
-                        console.log(
-                            `Navigation to ${href} prevented in this demo`,
-                        );
+                        console.log(`Navigation to ${href} prevented in this demo`);
                     }
                 });
             });
@@ -368,6 +366,11 @@
                 isDark = !isDark;
                 document.body.classList.toggle("light-theme");
                 toggle.style.transform = `rotate(${isDark ? 0 : 180}deg)`;
+                
+                // Dispatch custom event for theme change
+                const event = new Event('themeChanged');
+                document.body.dispatchEvent(event);
+                console.log('Theme changed event dispatched');
             });
         </script>
     </body>

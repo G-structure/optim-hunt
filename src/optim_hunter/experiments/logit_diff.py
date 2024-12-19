@@ -25,7 +25,7 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import create_logit_lens_plot
+from optim_hunter.plot_html import create_logit_lens_plot, get_theme_sync_js
 from optim_hunter.llama_model import load_llama_model
 import logging
 
@@ -116,6 +116,7 @@ def run_and_cache_model_linreg_tokens(model: HookedTransformer, seq_len: int, ba
     return linreg_tokens, linreg_logits, linreg_cache, linreg_data_store
 
 def generate_logit_diff_plots():
+    all_plots_html = []
     model = load_llama_model()
     seq_len = 25
     # TODO we need to be able to run more batches but not over 
@@ -280,8 +281,14 @@ def generate_logit_diff_plots():
         plot_html = create_logit_lens_plot(
             logit_lens_logit_diffs,
             labels,
-            token_pairs_names[i]
+            token_pairs_names[i],
+            include_theme_js=False
         )
         
-        # Output HTML to stdout
-        print(plot_html)
+        all_plots_html.append(plot_html)
+    
+    # Combine all plots
+    combined_html = "\n".join(all_plots_html) + get_theme_sync_js()
+    
+    # Output combined HTML to stdout
+    print(combined_html)
