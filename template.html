@@ -6,7 +6,7 @@
         <title>Transformer Circuits and Attention Patterns</title>
 
         <!-- Adding MathJax for equation rendering -->
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/js-polyfills/0.1.43/polyfill.min.js" integrity="sha512-lvWiOP+aMKHllm4THsjzNleVuGOh0WGniJ3lgu/nvCbex1LlaQSxySUjAu/LTJw9FhnSL/PVYoQcckg1Q03+fQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
         <script
             id="MathJax-script"
             async
@@ -373,5 +373,28 @@
                 console.log('Theme changed event dispatched');
             });
         </script>
+        <script>
+            // Add intersection observer for lazy loading plots
+            document.addEventListener('DOMContentLoaded', function() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const plot = entry.target;
+                            if (!plot.dataset.loaded) {
+                                // Initialize plot
+                                plot.dataset.loaded = true;
+                                const isLight = document.body.classList.contains('light-theme');
+                                updatePlotTheme(plot, isLight);
+                            }
+                        }
+                    });
+                }, {rootMargin: '100px'});
+            
+                // Observe all plots
+                document.querySelectorAll('.plotly-graph-div').forEach(plot => {
+                    observer.observe(plot);
+                });
+            });
+            </script>
     </body>
 </html>

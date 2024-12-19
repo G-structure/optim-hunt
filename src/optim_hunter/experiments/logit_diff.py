@@ -282,13 +282,14 @@ def generate_logit_diff_plots():
             logit_lens_logit_diffs,
             labels,
             token_pairs_names[i],
-            include_theme_js=False
+            include_theme_js=(i == len(token_pairs) - 1),  # Include theme JS with last plot
+            include_plotlyjs=(i == 0)  # Include Plotly.js only with first plot
         )
         
         all_plots_html.append(plot_html)
     
     # Combine all plots
-    combined_html = "\n".join(all_plots_html) + get_theme_sync_js()
+    combined_html = "\n".join(all_plots_html)
     
     # Output combined HTML to stdout
     print(combined_html)

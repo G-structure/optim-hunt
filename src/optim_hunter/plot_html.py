@@ -45,15 +45,27 @@ def get_theme_sync_js():
             }
         }
 
-        function updateAllPlots() {
-            console.log('Updating all plots');
+    // In template.html, modify the theme change handler
+    function updateAllPlots() {
+        // Debounce the update
+        if (window.plotUpdateTimeout) {
+            clearTimeout(window.plotUpdateTimeout);
+        }
+        
+        window.plotUpdateTimeout = setTimeout(() => {
             const isLight = document.body.classList.contains('light-theme');
             const plots = document.querySelectorAll('.plotly-graph-div');
-            console.log('Found', plots.length, 'plots');
-            plots.forEach(function(plotDiv) {
-                updatePlotTheme(plotDiv, isLight);
-            });
-        }
+            
+            // Update plots in batches
+            const batchSize = 3;
+            for (let i = 0; i < plots.length; i += batchSize) {
+                setTimeout(() => {
+                    const batch = Array.from(plots).slice(i, i + batchSize);
+                    batch.forEach(plot => updatePlotTheme(plot, isLight));
+                }, Math.floor(i/batchSize) * 100);
+            }
+        }, 250);
+    }
 
         // Wait for Plotly to be fully loaded
         function ensurePlotly() {
@@ -79,7 +91,7 @@ def get_theme_sync_js():
     </script>
     """
 
-def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, include_theme_js=False):
+def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, include_theme_js=False, include_plotlyjs=False):
     """
     Creates a lightweight, themed logit lens plot suitable for web embedding.
     
@@ -88,9 +100,10 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
         labels: List of layer labels
         comparison_name: Name of the comparison being plotted
         include_theme_js: Whether to include the theme sync JavaScript (should only be True once)
+        include_plotlyjs: Whether to include the Plotly.js library (should only be True once)
     
     Returns:
-        str: HTML/JavaScript code for the plot using Plotly
+        str: HTML/JavaScript code for the plot
     """
     import plotly.graph_objects as go
     
@@ -159,15 +172,22 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
 
     # Create figure
     fig = go.Figure(data=[trace], layout=layout)
+
+    config = {
+        'displayModeBar': False,
+        'staticPlot': False,  # Makes plot non-interactive but much lighter
+        'responsive': False,  # Disable responsiveness for faster rendering
+    }
     
-    # Generate plot HTML
+    # Generate plot HTML with controlled script inclusion
     plot_html = fig.to_html(
         full_html=False,
-        include_plotlyjs='cdn',
-        config={'displayModeBar': False}
+        include_plotlyjs='cdn' if include_plotlyjs else False,
+        config=config
     )
     
-    # Only include theme sync JavaScript if requested
+    # Add theme sync JavaScript if requested
     if include_theme_js:
-        return plot_html + get_theme_sync_js()
+        plot_html += get_theme_sync_js()
+    
     return plot_html
