@@ -7,7 +7,6 @@ requires-python = ">=3.10"
 dependencies = [
     "transformer-lens>=2.10.0",
     "einops>=0.8.0",
-    "torch>=2.0.0",
     "jaxtyping>=0.2.36",
     "circuitsvis",
     "jupyter>=1.1.1",
@@ -16,6 +15,7 @@ dependencies = [
     "scikit-learn>=1.6.0",
     "sentencepiece>=0.2.0",
     "bitsandbytes>=0.45.0",
+    "torch",
 ]
 
 [build-system]
@@ -25,3 +25,4 @@ build-backend = "hatchling.build"
 [tool.uv.sources]
 circuitsvis = { git = "https://github.com/callummcdougall/CircuitsVis.git", subdirectory = "python" }
 neel-plotly = { git = "https://github.com/neelnanda-io/neel-plotly" }
+torch = { path = "./torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl" }

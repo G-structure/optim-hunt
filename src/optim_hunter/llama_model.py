@@ -29,7 +29,6 @@ from optim_hunter.plot_html import create_logit_lens_plot
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Saves computation time, since we don't need it for the contents of this notebook
@@ -46,6 +45,7 @@ regressors = [ linear_regression, knn_regression, random_forest, baseline_averag
 
 MODEL_TYPE = "meta-llama/Meta-Llama-3-8B-Instruct"
 MODEL_PATH = "/home/freiza/optim_hunter/.models/Llama-3.1-8B-Instruct/"
+
 def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
     """
     Load and configure a Llama model using HookedTransformer.
@@ -69,7 +69,6 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
 
     tokenizer.padding_side = 'left'
     tokenizer.pad_token = tokenizer.eos_token
-
     model = HookedTransformer.from_pretrained(
         model_type,
         hf_model=hf_model,
@@ -83,7 +82,8 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
         # dtype=t.bfloat16,
         dtype=t.float16,
         default_padding_side='left',
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        verbose=False
     )
 
     return model

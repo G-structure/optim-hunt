@@ -4,7 +4,7 @@ date: December 2024
 reading_time: 30 minutes
 ---
 
-Large language models (LLMs) can do more than just complete sentences or write essays; recent work shows they can perform tasks resembling **linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
+Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
 
 This post attempts to dissect how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. We draw on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], seeking to understand the internal architecture that enables these models to behave like gradient-based learners.
 
@@ -105,8 +105,8 @@ By composing multiple layers, each performing a gradient update, Transformers ca
 Armed with this understanding, we turned to experiments on Llama 3.1 (8B) to see if similar dynamics occur in practice. We presented the model with sequences of (feature, output) pairs from a known linear relationship and then asked it to predict the output for a new input. The surprising result: Llama 3.1 surpassed naive methods like k-nearest neighbors, suggesting it might be performing in-context optimization.
 
 ```python
-from optim_hunter.experiments.logit_diff import generate_logit_diff_plots
-generate_logit_diff_plots()
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+generate_logit_diff_batched()
 ```
 
 ### Observations

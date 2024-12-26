@@ -25,12 +25,18 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import create_logit_lens_plot, get_theme_sync_js
-from optim_hunter.llama_model import load_llama_model, run_and_cache_model_linreg_tokens
-import logging
+from optim_hunter.plot_html import create_logit_lens_plot, get_theme_sync_js, create_plot, with_identifier
+from optim_hunter.llama_model import load_llama_model
+from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
+from typing import List, Tuple
 
-# Configure logging
-logging.basicConfig(level=logging.WARNING)
+import logging
+from optim_hunter.logging_config import setup_logging
+
+# Set up logging
+setup_logging("DEBUG")
+
+# Create logger for this module
 logger = logging.getLogger(__name__)
 
 # Saves computation time, since we don't need it for the contents of this notebook
@@ -167,53 +173,194 @@ def generate_logit_diff_plots():
         # Convert to half precision
         logit_lens_logit_diffs = logit_lens_logit_diffs.half()
 
-        # # # Generate plot
-        # line(
-        #     logit_lens_logit_diffs,
-        #     hovermode="x unified",
-        #     title=f"Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
-        #     labels={"x": "Layer", "y": "Logit Diff"},
-        #     xaxis_tickvals=labels,
-        #     width=800
-        # )
-        # # Save the logit lens plot
-        # fig = line(
-        #     logit_lens_logit_diffs,
-        #     hovermode="x unified", 
-        #     title=f"Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
-        #     labels={"x": "Layer", "y": "Logit Diff"},
-        #     xaxis_tickvals=labels,
-        #     width=800,
-        #     return_fig=True
-        # )
-        # # Save the file, creating it if it doesn't exist
-        # output_path = f"../docs/logit_lens_{token_pairs_names[i].replace(' ', '_')}.html"
-        # with open(output_path, 'w') as f:
-        #     fig.write_html(f)
-            # Create the plot
-        # fig = create_logit_lens_plot(
-        #     logit_lens_logit_diffs,
-        #     labels,
-        #     token_pairs_names[i]
-        # )
+        # Generate plots with unique identifiers for each
+        @with_identifier(f"logit-lens-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
+        def create_logit_lens_plot_with_id():
+            return create_plot(
+                y_values=logit_lens_logit_diffs,
+                title=f"Average Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
+                labels=labels,
+                x_label="Layer",
+                y_label="Logit Diff",
+                hover_mode="x unified",
+                include_plotlyjs=(i == 0),  # Only include plotly.js for first plot
+                include_theme_js=(i == len(token_pairs) - 1),  # Include theme JS with last plot
+            )
         
-        # # Save just the plot HTML
-        # output_path = f"../docs/logit_lens_{token_pairs_names[i].replace(' ', '_')}.html"
-        # with open(output_path, 'w') as f:
-        #     f.write(fig.to_html(
-        #         full_html=False,
-        #         include_plotlyjs='cdn',
-        #         config={'displayModeBar': False}
-        #     ))
-        plot_html = create_logit_lens_plot(
-            logit_lens_logit_diffs,
-            labels,
-            token_pairs_names[i],
-            include_theme_js=(i == len(token_pairs) - 1),  # Include theme JS with last plot
-            include_plotlyjs=(i == 0)  # Include Plotly.js only with first plot
-        )
+        # Generate and collect the plots
+        logit_lens_plot_html = create_logit_lens_plot_with_id()
+        all_plots_html.append(logit_lens_plot_html)
+            
+    # Combine all plots
+    combined_html = "\n".join(all_plots_html)
+    
+    # Output combined HTML to stdout
+    print(combined_html)
+
+def generate_logit_diff_batched():
+    model = load_llama_model()
+    all_plots_html = []
+
+    if t.cuda.is_available():
+        t.cuda.empty_cache()
+
+    (linreg_tokens, linreg_logits, linreg_caches, linreg_data_store) = run_and_cache_model_linreg_tokens_batched(
+        model,
+        seq_len=25,
+        total_batch=5
+    )
+
+    model.clear_contexts()
+
+    # Move all tokens and logits to CPU
+    linreg_tokens = [tokens.to('cpu') for tokens in linreg_tokens]
+    linreg_logits = [logits.to('cpu') for logits in linreg_logits]
+
+    # Verify all datasets have the same comparison names
+    base_comparison_names = linreg_data_store[0]["comparison_names"]
+    all_match = all(dataset["comparison_names"] == base_comparison_names for dataset in linreg_data_store[1:])
+    assert all_match, "Mismatch in comparison names across datasets."
+
+    # Extract comparison names from the first dataset
+    token_pairs_names = base_comparison_names.copy()
+
+    # Extract token pairs across all datasets for each comparison
+    token_pairs = [
+        t.stack([dataset["token_pairs"][i] for dataset in linreg_data_store])[0]
+        for i in range(len(token_pairs_names))
+    ]
+
+    logger.info(f"Number of comparisons: {len(token_pairs_names)}")
+    logger.info(f"Number of token_pairs: {len(token_pairs)}")
+
+    # Iterate over token pairs and generate plots
+    for i, token_pair in enumerate(token_pairs):
+        logger.info(f"Processing comparison {i}: {token_pairs_names[i]}")
+        token_pair = token_pair.to('cpu')
+
+        def logits_to_ave_logit_diff(
+            logits_list: List[Float[Tensor, "batch seq d_vocab"]],
+            answer_tokens: Float[Tensor, "batch 2"] = token_pair,
+            per_prompt: bool = False
+        ) -> Float[Tensor, "*batch"]:
+            # Process each batch separately
+            all_logit_diffs = []
+            
+            for logits in logits_list:
+                final_logits = logits[:, -1, :]  # Take final position from each batch
+                
+                correct = answer_tokens[:, 0]
+                incorrect = answer_tokens[:, 1]
+
+                correct_logits = final_logits[t.arange(final_logits.size(0)), correct]
+                incorrect_logits = final_logits[t.arange(final_logits.size(0)), incorrect]
+
+                logit_diff = correct_logits - incorrect_logits
+                all_logit_diffs.append(logit_diff)
+            
+            # Combine results
+            combined_logit_diffs = t.cat(all_logit_diffs)
+            
+            if per_prompt:
+                return combined_logit_diffs
+            else:
+                return combined_logit_diffs.mean()
+
+        original_per_prompt_diff = logits_to_ave_logit_diff(linreg_logits, token_pair, per_prompt=True)
+        original_average_logit_diff = logits_to_ave_logit_diff(linreg_logits, token_pair)
+
+        # Initialize lists to store results from all caches
+        all_logit_lens_diffs = []
+        all_per_layer_diffs = []
+        all_per_head_diffs = []
+
+        # Process each cache
+        for cache_idx, current_cache in enumerate(linreg_caches):
+            logger.info(f"Processing cache {cache_idx}")
+            
+            # Move cache to GPU
+            current_cache = current_cache
+
+            # Retrieve final residual stream
+            final_residual_stream = current_cache["resid_post", -1]
+            final_token_residual_stream = final_residual_stream[:, -1, :]
+
+            # Compute residual directions
+            pair_residual_directions = model.tokens_to_residual_directions(token_pair.to('cpu'))
+            correct_residual_directions, incorrect_residual_directions = pair_residual_directions.unbind(dim=1)
+            logit_diff_directions = correct_residual_directions - incorrect_residual_directions
+
+            def residual_stack_to_logit_diff(
+                residual_stack: Float[Tensor, "... batch d_model"],
+                cache: ActivationCache,
+                logit_diff_directions: Float[Tensor, "batch d_model"] = logit_diff_directions,
+            ) -> Float[Tensor, "..."]:
+                scaled_residual_stream = cache.apply_ln_to_stack(residual_stack, layer=-1, pos_slice=-1)
+                logit_diff_directions = logit_diff_directions.to(dtype=scaled_residual_stream.dtype).to('cpu')
+
+                batch_size = residual_stack.size(-2)
+                avg_logit_diff = einops.einsum(
+                    scaled_residual_stream,
+                    logit_diff_directions,
+                    "... batch d_model, batch d_model -> ..."
+                ) / batch_size
+                return avg_logit_diff
+
+            # Accumulate residuals
+            accumulated_residual, labels = current_cache.accumulated_resid(
+                layer=-1, incl_mid=True, pos_slice=-1, return_labels=True
+            )
+            logit_lens_logit_diffs = residual_stack_to_logit_diff(accumulated_residual, current_cache).half()
+            all_logit_lens_diffs.append(logit_lens_logit_diffs)
+
+            # Per layer analysis
+            per_layer_residual, _ = current_cache.decompose_resid(layer=-1, pos_slice=-1, return_labels=True)
+            per_layer_logit_diffs = residual_stack_to_logit_diff(per_layer_residual, current_cache)
+            all_per_layer_diffs.append(per_layer_logit_diffs)
+
+            # Clear GPU memory
+            current_cache = current_cache.to('cpu')
+            if t.cuda.is_available():
+                t.cuda.empty_cache()
+
+        # Average results across all caches
+        avg_logit_lens_diffs = t.stack(all_logit_lens_diffs).mean(dim=0)
+        avg_per_layer_diffs = t.stack(all_per_layer_diffs).mean(dim=0)
+        # avg_per_head_diffs = t.stack(all_per_head_diffs).mean(dim=0)
+
+        # Generate plots with unique identifiers for each
+        @with_identifier(f"logit-lens-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
+        def create_logit_lens_plot_with_id():
+            return create_plot(
+                y_values=avg_logit_lens_diffs,
+                title=f"Average Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
+                labels=labels,
+                x_label="Layer",
+                y_label="Logit Diff",
+                hover_mode="x unified",
+                include_plotlyjs=(i == 0),  # Only include plotly.js for first plot
+                include_theme_js=False
+            )
+
+        @with_identifier(f"per-layer-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
+        def create_per_layer_plot_with_id():
+            return create_plot(
+                y_values=avg_per_layer_diffs,
+                title=f"Average Per Layer Logit Difference for {token_pairs_names[i]}",
+                labels=labels,
+                x_label="Layer",
+                y_label="Logit Diff",
+                hover_mode="x unified",
+                include_plotlyjs=False,  # Don't include plotly.js again
+                include_theme_js=(i == len(token_pairs) - 1)  # Include theme js only on last plot
+            )
+
+        # Generate and collect the plots
+        logit_lens_plot_html = create_logit_lens_plot_with_id()
+        per_layer_plot_html = create_per_layer_plot_with_id()
         
-        all_plots_html.append(plot_html)
+        all_plots_html.append(logit_lens_plot_html)
+        all_plots_html.append(per_layer_plot_html)
     
     # Combine all plots
     combined_html = "\n".join(all_plots_html)
