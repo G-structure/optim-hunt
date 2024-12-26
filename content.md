@@ -106,7 +106,12 @@ Armed with this understanding, we turned to experiments on Llama 3.1 (8B) to see
 
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
-generate_logit_diff_batched()
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
+from optim_hunter.datasets import get_dataset_friedman_2
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random ]
+
+generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors)
 ```
 
 ### Observations

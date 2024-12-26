@@ -48,13 +48,13 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 MAIN = __name__ == "__main__"
 
-def generate_logit_diff_plots():
+def generate_logit_diff_plots(dataset, regressors):
     all_plots_html = []
     model = load_llama_model()
     seq_len = 25
     # TODO we need to be able to run more batches but not over 
     batch = 1
-    (linreg_tokens, linreg_logits, linreg_cache, linreg_data_store) = run_and_cache_model_linreg_tokens(model, seq_len, batch)
+    (linreg_tokens, linreg_logits, linreg_cache, linreg_data_store) = run_and_cache_model_linreg_tokens(model, dataset, regressors, seq_len, batch)
     model.clear_contexts()
     linreg_tokens = linreg_tokens.to('cpu')
     linreg_logits = linreg_logits.to('cpu')
@@ -197,7 +197,7 @@ def generate_logit_diff_plots():
     # Output combined HTML to stdout
     print(combined_html)
 
-def generate_logit_diff_batched():
+def generate_logit_diff_batched(dataset, regressors):
     model = load_llama_model()
     all_plots_html = []
 
@@ -206,6 +206,8 @@ def generate_logit_diff_batched():
 
     (linreg_tokens, linreg_logits, linreg_caches, linreg_data_store) = run_and_cache_model_linreg_tokens_batched(
         model,
+        dataset,
+        regressors,
         seq_len=25,
         total_batch=5
     )
