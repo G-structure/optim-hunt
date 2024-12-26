@@ -132,24 +132,59 @@ prompt = prepare_prompt(x_train, y_train, x_test)
 print(prompt)
 ```
 
+Let's compare the preformance of Llama3.1 8b and 3 regressors from scikit learn, `linear_regression`, `knn_regression`, `random_forest`, and 2 baselines of average and last value. Comparing the MSE against the gold true value for 25 runs over the Friedman #2 dataset.
 ```python
 from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
+from optim_hunter.sklearn_regressors import (
+    linear_regression, ridge, lasso, mlp_universal_approximation_theorem1,
+    mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3,
+    mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging,
+    gradient_boosting, adaboost, bayesian_regression1,
+    svm_regression, svm_and_scaler_regression, knn_regression,
+    knn_regression_v2, knn_regression_v3, knn_regression_v4,
+    knn_regression_v5_adaptable, kernel_ridge_regression,
+    baseline_average, baseline_last, baseline_random
+)
 from optim_hunter.datasets import get_dataset_friedman_2
 
-regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random ]
+seq_len = 25
+batches = 100
+regressors = [ linear_regression, ridge, lasso, mlp_universal_approximation_theorem1, mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3, mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging, gradient_boosting, adaboost, bayesian_regression1, svm_regression, svm_and_scaler_regression, knn_regression, knn_regression_v2, knn_regression_v3, knn_regression_v4, knn_regression_v5_adaptable, kernel_ridge_regression, baseline_average, baseline_last, baseline_random]
 
-compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors)
+compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
 
+Let's sweep the hyper parms for linear regression.
+```python
+from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
+from optim_hunter.sklearn_regressors import create_linear_regression_gd_variants
+from optim_hunter.datasets import get_dataset_friedman_2
+
+seq_len = 25
+batches = 100
+gd_variants = create_linear_regression_gd_variants(
+    # Define hyperparameter ranges
+    steps_options = [1, 2, 3, 4],
+    learning_rates = [0.0001, 0.001, 0.01, 0.1, 0.5, 1.0],
+    init_weights_options = ['zeros', 'ones', 'random', 'random_uniform'],
+    momentum_values = [0.0, 0.5, 0.9],  # 0.0 means no momentum
+    lr_schedules = ['constant', 'linear_decay', 'exponential_decay']
+)
+
+compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=gd_variants, seq_len=seq_len, batches=batches)
+```
+
+Hi mom
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 
+seq_len = 25
+batches = 5
 regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random ]
 
-generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors)
+generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
 
 ### Observations

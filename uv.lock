@@ -725,17 +725,6 @@ http = [
 ]
 
 [[package]]
-name = "g-structure"
-version = "0.1.0"
-source = { directory = "src/g_structure" }
-dependencies = [
-    { name = "plotly" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "plotly", specifier = ">=5.24.1" }]
-
-[[package]]
 name = "gitdb"
 version = "4.0.11"
 source = { registry = "https://pypi.org/simple" }
@@ -1678,7 +1667,6 @@ dependencies = [
     { name = "bitsandbytes" },
     { name = "circuitsvis" },
     { name = "einops" },
-    { name = "g-structure" },
     { name = "jaxtyping" },
     { name = "jupyter" },
     { name = "neel-plotly" },
@@ -1694,7 +1682,6 @@ requires-dist = [
     { name = "bitsandbytes", specifier = ">=0.45.0" },
     { name = "circuitsvis", git = "https://github.com/callummcdougall/CircuitsVis.git?subdirectory=python" },
     { name = "einops", specifier = ">=0.8.0" },
-    { name = "g-structure", directory = "src/g_structure" },
     { name = "jaxtyping", specifier = ">=0.2.36" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "neel-plotly", git = "https://github.com/neelnanda-io/neel-plotly" },
