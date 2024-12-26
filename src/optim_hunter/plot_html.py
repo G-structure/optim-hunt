@@ -10,6 +10,13 @@ THEME_COLORS = {
         'gridcolor': '#93a1a1',
         'text_color': '#073642',
         'bar_color': '#2075c7',
+        'multi_line_colors': [
+            '#2075c7', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+            '#1f77b4', '#ff9896', '#98df8a', '#c5b0d5', '#c49c94',
+            '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5', '#393b79',
+            '#637939', '#8c6d31', '#843c39', '#7b4173', '#5254a3'
+        ]
     },
     'dark': {
         'plot_bgcolor': 'rgba(26,26,26,0)',
@@ -17,6 +24,13 @@ THEME_COLORS = {
         'gridcolor': '#444',
         'text_color': '#e0e0e0',
         'bar_color': '#9ec5fe',
+        'multi_line_colors': [
+            '#9ec5fe', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
+            '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5',
+            '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
+            '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5',
+            '#637939', '#8c6d31', '#843c39', '#7b4173', '#5254a3'
+        ]
     }
 }
 
@@ -339,6 +353,110 @@ def create_bar_plot(
     """
     
     # Add theme sync JavaScript if requested
+    if include_theme_js:
+        plot_html += get_theme_sync_js()
+    
+    return plot_html
+
+# Add new function to plot_html.py
+def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_label="Value",
+                          hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
+    """
+    Creates a multi-line plot with different colors for each line.
+    
+    Args:
+        y_values_list: List of lists/tensors containing y-values for each line
+        labels: List of labels for each line
+        title: Plot title
+        x_label: Label for x-axis
+        y_label: Label for y-axis
+        hover_mode: Plotly hover mode
+        include_theme_js: Whether to include theme sync JavaScript
+        include_plotlyjs: Whether to include Plotly.js library
+    """
+    traces = []
+    
+    # Convert tensors to lists if necessary
+    y_values_list = [y.tolist() if hasattr(y, 'tolist') else y for y in y_values_list]
+    
+    for i, (y_values, label) in enumerate(zip(y_values_list, labels)):
+        trace = go.Scatter(
+            x=list(range(len(y_values))),
+            y=y_values,
+            name=label,
+            mode='lines+markers',
+            line=dict(
+                color=THEME_COLORS['dark']['multi_line_colors'][i],
+                width=2
+            ),
+            marker=dict(
+                size=6,
+                color=THEME_COLORS['dark']['multi_line_colors'][i],
+                line=dict(
+                    color=THEME_COLORS['dark']['plot_bgcolor'],
+                    width=1
+                )
+            ),
+            hovertemplate=f'{label}<br>{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+        )
+        traces.append(trace)
+
+    layout = go.Layout(
+        plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
+        paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
+        margin=dict(l=50, r=20, t=50, b=50, pad=4),
+        xaxis=dict(
+            title=x_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        yaxis=dict(
+            title=y_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        title=dict(
+            text=title,
+            font=dict(size=14, color=THEME_COLORS['dark']['text_color']),
+            x=0.5,
+            xanchor='center'
+        ),
+        hoverlabel=dict(
+            bgcolor='#333',
+            font_size=12,
+            font_family="monospace"
+        ),
+        hovermode=hover_mode,
+        autosize=True,
+        showlegend=True,
+        legend=dict(
+            font=dict(color=THEME_COLORS['dark']['text_color']),
+            bgcolor='rgba(0,0,0,0)'
+        )
+    )
+
+    fig = go.Figure(data=traces, layout=layout)
+    
+    config = {
+        'displayModeBar': False,
+        'staticPlot': False,
+        'responsive': True,
+    }
+    
+    plot_html = f"""
+    <div class="plot-container">
+        {fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if include_plotlyjs else False,
+            config=config
+        )}
+    </div>
+    """
+    
     if include_theme_js:
         plot_html += get_theme_sync_js()
     

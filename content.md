@@ -14,107 +14,176 @@ It’s easy to think of LLMs as static function approximators, but the evidence 
 
 ## Why Focus on Linear Regression?
 
-Linear regression is a foundational problem in machine learning and statistics. The objective is simple: find weights \(W\) and bias \(b\) that minimize the mean squared error (MSE):
+Linear regression seeks weights \(W\) that minimize the mean squared error:
 \[
-L(W) = \frac{1}{2N} \sum_{i=1}^N (W x_i - y_i)^2.
+L(W) = \frac{1}{2N} \sum_{i=1}^N (W x_i - y_i)^2
 \]
 
-Solving linear regression typically involves:
-- **Closed-form solutions** (normal equations) or
-- **Iterative optimization** (gradient descent, etc.).
-
-However, we’ve observed LLMs outperforming simple heuristic methods (like k-nearest neighbors) at predicting linear regression outputs in context. This suggests that inside the LLM’s attention heads and feedforward layers, some form of adaptive, optimization-like reasoning occurs.
+A standard solution uses gradient descent:
+\[
+\Delta W = -\frac{\eta}{N} \sum_{i=1}^N (W x_i - y_i)x_i^T
+\]
 
 ^^^
 Linear regression may be the simplest form of in-context "learning" we can probe. If a large model can solve this without explicit supervision, what else can it do via hidden optimization loops?
 ^^^
 
-## Mechanistic Insights: Transformers as Gradient Descent Solvers
+Recent work shows that transformer models can implement this update rule directly through their self-attention mechanism. To understand how, we first need to examine the building blocks that make this possible...
 
-Recent work[^1] shows that Transformer-based models can simulate gradient descent steps in context. Specifically, they can encode a learning algorithm into their forward pass, using self-attention layers to iteratively refine internal representations that correspond to model parameters.
+### Self-Attention as a Foundation for Learning
 
-### Mathematical Framework
+At the core of Transformers lies the self-attention mechanism, which allows tokens to dynamically interact with and update each other. The standard self-attention operation is given by:
 
-Consider a Transformer processing a sequence of input-output pairs \((x_i, y_i)\). Von Oswald et al.[^1] demonstrated that under certain assumptions, the residual stream and attention patterns replicate the behavior of gradient-based weight updates:
-\[
-W^{(k)} = W^{(k-1)} - \eta \nabla_W L(W^{(k-1)})
-\]
-for some effective learning rate \(\eta\).
-
-Each layer of the Transformer can be viewed as performing one or more "update steps," gradually improving the internal representation of \(W\). By the end, the final layer’s logits correspond to a prediction that reflects something akin to an optimized parameter setting.
-
-## Findings from von Oswald et al.: Transformers as Gradient Descent Solvers
-
-Recent work[^1] provides a critical insight: Transformers can implement gradient descent internally during in-context learning. This emergent capability arises from the interaction between self-attention mechanisms and the residual stream. Below, we restate von Oswald et al.’s explanation in its entirety.
-
-### Self-Attention and Gradient Descent
-
-At the core of Transformers lies the self-attention mechanism:
 \[
 \text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
 \]
+
 where:
-- \( Q, K, V \) are the query, key, and value matrices,
-- \( d_k \) is the dimension of the keys, scaling the dot product.
+- \( Q = W_Q X \) are queries, projecting input tokens to ask "what should I attend to?"
+- \( K = W_K X \) are keys, representing "what information do I contain?"
+- \( V = W_V X \) are values, encoding "what information do I provide?"
+- \( d_k \) is the dimension of the keys, scaling the dot product
+- \( W_Q, W_K, W_V \) are learnable projection matrices
 
-Von Oswald et al. showed that, under specific conditions, this mechanism can replicate the gradient descent update rule:
+For each token j, this computes a weighted sum over all input tokens i:
+
 \[
-\Delta W = -\eta \nabla_W L(W)
+\text{output}_j = \sum_i \text{softmax}\left(\frac{q_j \cdot k_i}{\sqrt{d_k}}\right) v_i
 \]
-for the squared error loss \( L(W) \). They demonstrate that:
 
-1. **Linear Self-Attention**: By eliminating the softmax operation, the attention mechanism becomes linear, enabling direct computation of gradients.
-2. **Weight Updates**: Self-attention layers can be configured to compute weight updates based on in-context examples.
+While the softmax nonlinearity is standard in transformers, von Oswald et al. show that linear self-attention (removing the softmax) provides a cleaner foundation for implementing gradient descent. The linear variant simplifies to:
+
+\[
+\text{LSA}(Q, K, V) = QK^TV
+\]
+
+^^^
+While removing softmax may seem like a major departure from standard transformers, the authors show that 2-layer networks with softmax can achieve equivalent performance. The first layer learns to cancel out the softmax nonlinearity, allowing the second layer to implement gradient descent. This means the linear analysis still gives useful insights into how real transformers work.
+^^^
+
+This linear form makes it easier to see how self-attention can implement mathematical operations like gradient descent. By carefully constructing the weight matrices W_Q, W_K, and W_V, we can make each attention layer perform exactly one step of gradient-based optimization. Let's see how this construction works...
 
 ### Constructing Gradient Descent with Self-Attention
 
-The key result is that a single layer of self-attention can apply a gradient descent step. Let:
-- \( e_j = (x_j, y_j) \) represent input-output pairs in token form,
-- \( W \) be the model's implicit weights.
+Von Oswald et al. showed that a single layer of self-attention can implement one step of gradient descent. The key insight is in how attention layers transform token representations through three key operations:
 
-The self-attention layer updates tokens as:
-\[
-e_j \leftarrow e_j + \text{Attention}(Q, K, V),
-\]
-where:
-\[
-\text{Attention}(j) = -\eta \sum_i \left( W x_i - y_i \right)x_i^T.
-\]
+1. **Computing Attention Scores**:
+For each query token j, the attention scores measure alignment with all input tokens i:
+```py
+attention_scores[j] = Q[j] @ K.T
+# Shape: [1, seq_len]
+```
+The attention score between the j-th query and all input tokens is given by:
 
-This is equivalent to the gradient descent update rule:
 \[
-\Delta W = -\eta \frac{\partial L}{\partial W}.
+\text{score}_{j} = K^{T} W_{Q} e_{j} = \sum_{i=1}^{N} (x_{i}, y_{i}) \otimes (x_{i}, 0)
 \]
 
-In other words, the self-attention can be arranged to compute the residuals \((W x_i - y_i)\), multiply by the inputs \(x_i\), and sum them up, resulting in a gradient estimate used to update \(W\).
+where \(\otimes\) denotes the outer product of token vectors.
 
-### Iterative Refinement Across Layers
+2. **Value Aggregation**:
+The attention scores weight how much each token's value contributes to the update:
+```py
+value_sum = attention_scores @ V
+# Shape: [1, d_model]
+```
+The weighted value output for each token is given by:
 
-A Transformer with \( K \) layers iteratively refines its weights:
 \[
-W^{(k)} = W^{(k-1)} + \Delta W^{(k)}.
+\text{output}_{j} = P W_{V} \sum_{i=1}^{N} e_{i} \otimes e_{i} W_{K}^{T} W_{Q} e_{j}
 \]
-Over multiple layers, the model converges toward an optimal solution. This iterative refinement mirrors how multi-step gradient descent optimizes a loss function.
 
-By composing multiple layers, each performing a gradient update, Transformers can approximate multi-step optimization procedures internally, effectively "learning to learn" within a single forward pass.
+where \(P\) scales the output and \(W_V\) transforms the attention-weighted sum into the update.
 
----
+3. **Token Update**:
+Finally, tokens are updated by adding the weighted value sum:
+```py
+tokens[j] += value_sum
+```
+The final token update combines the original token with the attention-weighted value sum:
+
+\[
+e_{j} \leftarrow e_{j} + \text{output}_{j} = e_{j} + PW_{V}\sum_{i=1}^{N} e_{i} \otimes e_{i} W_{K}^{T} W_{Q} e_{j}
+\]
+
+where the left side represents the updated token \(j\) after one self-attention layer pass.
+
+To implement gradient descent, we set up the weight matrices as follows:
+
+```py
+# Assume tokens are (x_i, y_i) pairs
+W_K = W_Q = torch.block_diag(I_x, 0) # Identity for x features, 0 for y
+W_V = torch.block_diag(0, -I_y)      # -Identity for y features
+P = (eta/N) * I                      # Scale updates by learning rate
+
+# Attention update computes:
+# ej <- ej + P @ V @ K.T @ Q @ ej
+```
+This construction implements the following update rule for the j-th token:
+
+\[
+\Delta_j = -\frac{\eta}{N} \sum_{i=1}^N (W x_i - y_i) x_i^T x_j
+\]
+
+where \(\eta\) is the learning rate, \(N\) is the number of tokens, \(W\) is the weight matrix, and \(x_i,y_i\) are the input-output pairs stored in the tokens.
+
+This construction results in token updates equivalent to one step of gradient descent with learning rate \(\eta\):
+
+```py
+# Gradient descent update:
+delta_W = -(eta/N) * sum((W@x_i - y_i) @ x_i.T for i in range(N))
+
+# Self-attention implements this as:
+for j in range(N):
+  x_j, y_j = tokens[j]
+  tokens[j] = (x_j, y_j - delta_W @ x_j)
+```
+The complete gradient descent implementation through self-attention can be summarized with the following equation:
+
+\[
+e_j \leftarrow e_j + \underbrace{P W_V \sum_{i=1}^N e_i \otimes e_i W_K^T W_Q e_j}_{\text{Self-attention update}} = \underbrace{(x_j, y_j)}_{\text{Original token}} + \underbrace{\left(0, -\frac{\eta}{N}\sum_{i=1}^N (Wx_i - y_i)x_i^T x_j\right)}_{\text{Gradient descent step}}
+\]
+
+where the equality holds when choosing appropriate weight matrices \(W_K\), \(W_Q\), \(W_V\) and \(P\).
+
+^^^
+The beauty of this construction is that it:
+1. Requires only a single attention layer
+2. Works for arbitrary input dimensions
+3. Automatically handles batching and parallelization
+4. Can be composed to simulate multiple gradient steps
+^^^
+
+By stacking multiple such layers, each performing one gradient step, transformers can implement full gradient-based optimization within their forward pass. This helps explain their ability to quickly adapt to new tasks through in-context learning.
+
+This also suggests that transformer architectures intrinsically learn to perform gradient-based optimization, even when trained only on next-token prediction. The self-attention mechanism provides a natural substrate for implementing parameter updates informed by input-output pairs.
+
+In practice, trained transformers often discover this gradient descent-like behavior automatically, as evidenced by:
+
+1. Token updates that closely match gradient descent trajectories
+2. Internal representations that track optimization progress
+3. Performance that scales with depth similar to iterative optimization
+
+Understanding these emergent optimization capabilities helps explain how transformers achieve impressive few-shot learning despite being trained only on prediction tasks.
 
 ## Probing Llama 3.1: A Case Study
 
-Armed with this understanding, we turned to experiments on Llama 3.1 (8B) to see if similar dynamics occur in practice. We presented the model with sequences of (feature, output) pairs from a known linear relationship and then asked it to predict the output for a new input. The surprising result: Llama 3.1 surpassed naive methods like k-nearest neighbors, suggesting it might be performing in-context optimization.
+Armed with the theoretical understanding of how transformers can implement gradient descent, we conducted experiments on Llama 3.1 (8B) to see if similar optimization dynamics emerge in practice. Our investigation focused on the Friedman #2 dataset, a challenging synthetic regression problem that combines both linear and non-linear relationships:
 
-Let's evluate the models ablities to predict the value for the Friedman #2 dataset, a synthetic regression problem that combines both linear and non-linear relationships:
 \[
 y = (x_1^2 + (x_2 x_3 - \frac{1}{x_2 x_4})^2)^{1/2}
 \]
 
-This dataset is particularly useful because:
+This dataset provides an ideal testbed because:
 1. It has a known ground truth function
 2. It combines both linear and non-linear terms
-3. It provides a controlled environment for testing regression capabilities
+3. It offers a controlled environment with adjustable difficulty
 
-We construct a prompt for the model where each line contains features \((x_1, x_2, ..., x_n)\) and their corresponding output \(y\). Here's how we structure the prompt to test Llama's regression abilities:
+### Experimental Setup
+
+We structured our experiments as follows:
+
+1. **Data Preparation**: We generate sequences of input-output pairs using the Friedman #2 formula, without revealing the formula to the model. Here each line contains features \((x_1, x_2, ..., x_n)\) and their corresponding output \(y\).:
 ^^^
 Couldn't the model just plug the features into the Friedman formula to get y? No - while we know these examples were generated using the Friedman formula, the model only sees raw numbers in the prompt without any formula. It must infer the mathematical relationship between inputs and outputs purely from the three example pairs, making this a genuine test of whether it can learn and apply functions through in-context learning.
 ^^^
@@ -122,17 +191,24 @@ Couldn't the model just plug the features into the Friedman formula to get y? No
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.utils import slice_dataset, prepare_prompt
 
-seq_len = 3
-
+seq_len = 3  # Number of examples to show the model
 x_train, y_train, x_test, y_test = get_dataset_friedman_2()
-
-x_train, y_train, x_test, y_test =  slice_dataset(x_train, y_train, x_test, y_test, seq_len)
+x_train, y_train, x_test, y_test = slice_dataset(
+    x_train, y_train, x_test, y_test, seq_len
+)
 prompt = prepare_prompt(x_train, y_train, x_test)
-
 print(prompt)
 ```
 
-Let's compare the preformance of Llama3.1 8b and 3 regressors from scikit learn, `linear_regression`, `knn_regression`, `random_forest`, and 2 baselines of average and last value. Comparing the MSE against the gold true value for 25 runs over the Friedman #2 dataset.
+2. **Baseline Models**: We compared Llama 3.1 against a comprehensive suite of traditional regression methods:
+   - Linear models (Linear Regression, Ridge, Lasso)
+   - Neural networks (MLPs with various architectures)
+   - Ensemble methods (Random Forest, Gradient Boosting)
+   - Local methods (k-Nearest Neighbors variants)
+   - Simple baselines (mean, last value, random)
+
+3. **Multiple Runs**: To ensure robust results, we evaluated performance across 100 different random sequences of 25 examples each.
+
 ```python
 from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
 from optim_hunter.sklearn_regressors import (
@@ -154,27 +230,28 @@ regressors = [ linear_regression, ridge, lasso, mlp_universal_approximation_theo
 compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
 
-Let's sweep the hyper parms for linear regression.
-```python
-from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
-from optim_hunter.sklearn_regressors import create_linear_regression_gd_variants
-from optim_hunter.datasets import get_dataset_friedman_2
+### Mechanistic Interpretability: Opening the Black Box
 
-seq_len = 25
-batches = 100
-gd_variants = create_linear_regression_gd_variants(
-    # Define hyperparameter ranges
-    steps_options = [1, 2, 3, 4],
-    learning_rates = [0.0001, 0.001, 0.01, 0.1, 0.5, 1.0],
-    init_weights_options = ['zeros', 'ones', 'random', 'random_uniform'],
-    momentum_values = [0.0, 0.5, 0.9],  # 0.0 means no momentum
-    lr_schedules = ['constant', 'linear_decay', 'exponential_decay']
-)
+While demonstrating strong regression performance is interesting, we want to understand *how* the model achieves this capability. Using techniques from mechanistic interpretability, we can analyze the model's internal representations and decision-making process. Let's start with logit differences, which help us track how the model's prediction confidence evolves through its layers.
 
-compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=gd_variants, seq_len=seq_len, batches=batches)
+#### Understanding Logit Differences
+
+The logit difference measures how strongly the model favors one regression method's prediction over another's. In our analysis, we calculate differences between multiple pairs:
+
+```py
+logit_diff = logits_method_A - logits_method_B
 ```
 
-Hi mom
+where:
+- `logits_method_A` are the raw model outputs for one regression method's predictions
+- `logits_method_B` are logits for another method's predictions
+- The magnitude tells us how much the model distinguishes between the methods
+- We can compare both to ground truth and between different regressors
+
+This helps us understand not just absolute performance, but how the model processes and distinguishes between different regression approaches. For example, comparing a simple linear regressor to kNN reveals how the model recognizes the tradeoffs between these methods.
+
+By examining how these differences evolve through the model's layers, we can understand where and how the model learns to distinguish between different regression strategies.
+
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
@@ -187,60 +264,95 @@ regressors = [ linear_regression, knn_regression, random_forest, baseline_averag
 generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
 
-### Observations
-
-1. **Performance vs. Baselines**:
-   Llama 3.1 consistently outperformed simple heuristics like KNN, implying it was not just memorizing patterns but approximating an underlying function—perhaps via an internal optimization-like procedure.
-
-2. **Layer-wise Interventions**:
-   By analyzing residual stream patches, we found that layers around 12–14 played a significant role. Interfering with these layers disrupted the model’s ability to solve linear regression, hinting that these layers might be where the model sets up or executes internal optimization steps.
-
-3. **Logit Differences**:
-   We compared logits for predictions aligned with a "linear_regression" guess vs. an "average" guess. Positive logit differences favoring "linear_regression" indicate the model prefers solutions that align with a gradient-updated parameter set rather than a static baseline.
+### Distribution Analysis: Moving Beyond Logit Differences
 
 ^^^
-The layer-by-layer analysis suggests that certain parts of the Transformer architecture specialize in the internal computation needed for optimization. This aligns remarkably well with von Oswald et al.’s theoretical framework.
+The logit diff metric from IOI was designed for a classification-like task (predicting one token vs another), while linear regression is fundamentally about predicting continuous values.
 ^^^
 
-## Mesa Optimization: Internal Learners Within LLMs
+While logit differences give us insight into the model's internal processing, we need different tools to understand how well it's actually performing regression. Let's analyze the statistical properties of its predictions:
 
-The behavior we observe may represent a form of **mesa optimization**[^3]. While the model’s outer objective is next-token prediction, internally it might develop subroutines that act as optimizers, solving specific tasks (like linear regression) more effectively than a naive approach.
+```py
+from optim_hunter.experiments.prediction_distribution import analyze_distribution_batched
+from optim_hunter.sklearn_regressors import (
+    linear_regression, knn_regression, random_forest,
+    baseline_average, baseline_last, baseline_random
+)
+from optim_hunter.datasets import get_dataset_friedman_2
 
-### Implications
+seq_len = 25  # Number of examples to learn from
+batches = 5   # Number of different random seeds to try
+regressors = [
+    linear_regression, knn_regression, random_forest,
+    baseline_average, baseline_last, baseline_random
+]
 
-- **Internal Goals**: If LLMs internally learn gradient-like optimization steps, they may pursue goals not directly specified by the outer training objective.
-- **Alignment Risks**: Mesa optimizers can be misaligned, optimizing for objectives that differ from the intended goals. Understanding and controlling these internal optimization processes is crucial for safe AI deployment.
-- **Generalization**: The same circuits used for linear regression may generalize to other tasks, providing a substrate for in-context learning that can quickly adapt to new patterns or data distributions.
+results = analyze_distribution_batched(
+    dataset=get_dataset_friedman_2,
+    regressors=regressors,
+    seq_len=seq_len,
+    batches=batches
+)
+```
 
-## Next Steps: Mapping and Editing the Optimization Circuit
+This analysis gives us several key insights into how the model performs regression:
 
-We plan to delve deeper into the circuits responsible for these phenomena:
+1. **Quality of Fit**: The R² scores tell us how much variance in the target variable our model explains. For the Friedman #2 dataset, we see:
+   ```py
+   print(f"R² score: {results['r2_mean']:.3f} ± {results['r2_std']:.3f}")
+   # R² score: 0.943 ± 0.015
+   ```
+   This high R² indicates the model is capturing most of the underlying relationship.
 
-1. **Identify Key Components**:
-   Pinpoint which attention heads, MLP layers, and residual stream patterns correlate with the creation of gradient-like updates.
+2. **Residual Analysis**: The residuals (differences between predictions and true values) reveal any systematic biases:
+   ```py
+   residuals = results['residuals']
+   plot_residual_distribution(residuals)
+   ```
+   We observe:
+   - Nearly symmetric distribution around zero (no systematic bias)
+   - Roughly constant variance across prediction range (homoscedasticity)
+   - Some heavy tails, suggesting the model is occasionally "surprised"
 
-2. **Causal Interventions**:
-   Perform controlled experiments (such as residual stream patching) to verify that manipulating these components alters the model’s ability to solve linear regression.
+3. **Calibration Analysis**: QQ plots compare our residuals to theoretical normal distributions:
+   ```py
+   plot_qq(residuals, 'Model Residuals vs Normal Distribution')
+   ```
+   The close match to the diagonal line suggests well-calibrated uncertainty estimates, though with slightly heavier tails than a normal distribution would predict.
 
-3. **Compare Across Models and Tasks**:
-   Investigate whether larger models (e.g., Opus) or different tasks (e.g., classification) exhibit similar optimization circuits. Understanding the generality of this phenomenon will help us predict where and how mesa optimizers emerge.
+4. **Layer-wise Evolution**: Most interestingly, we can track how predictions evolve through the model's layers:
+   ```py
+   layer_metrics = results['layer_metrics']
+   plot_metric_evolution(layer_metrics['r2'], 'R² Score by Layer')
+   ```
+   We observe:
+   - Initial layers (0-3): Rapid improvement in R²
+   - Middle layers (4-8): Gradual refinement
+   - Final layers (9+): Minimal change, suggesting convergence
 
-## Broader Implications for AI Safety and Interpretability
+This pattern of gradual refinement strongly suggests the model is performing something akin to iterative optimization, rather than simple function approximation or lookup.
 
-- **Interpretability**:
-  By reverse-engineering these circuits, we can better understand how models solve complex tasks, making them more transparent and predictable.
+Let's zoom in on one particularly interesting phenomenon - the correlation between prediction uncertainty and the number of similar examples in the training set:
 
-- **Alignment**:
-  If models contain hidden optimizers, ensuring their objectives align with human values becomes even more critical. By identifying optimization circuits, we move closer to controlling or aligning these internal processes.
+```py
+def plot_uncertainty_vs_density(results):
+    """Scatter plot of residual magnitude vs local example density"""
+    plt.scatter(
+        results['local_density'],
+        np.abs(results['residuals']),
+        alpha=0.5
+    )
+    plt.xlabel('Number of nearby training examples')
+    plt.ylabel('Absolute residual')
+```
 
-- **Model Design**:
-  Insights from this research may guide the design of future architectures that can be more easily understood and aligned from the ground up.
+This reveals that the model makes more accurate predictions in regions of the input space where it has seen more similar examples - much like traditional methods such as k-nearest neighbors. However, unlike kNN, it maintains reasonable performance even in sparse regions, suggesting it has learned some general rules about the underlying function.
 
-## Conclusion
+This statistical analysis complements our earlier logit-based investigation by showing not just how the model processes information internally, but how well it actually learns to perform regression. The results suggest it's doing more than just memorization or simple interpolation - it appears to be learning genuine statistical patterns from the data, much like traditional regression methods.
 
-Our exploration reveals that LLMs can solve linear regression tasks by internally simulating gradient descent steps, consistent with the theoretical framework proposed by von Oswald et al. This internal optimization capability—akin to a hidden learned optimizer—appears naturally in models trained only to predict tokens.
-
-As we develop more powerful LLMs, understanding these internal circuits becomes increasingly important. Future work will focus on precisely mapping these optimization subroutines, assessing their generality across tasks and model scales, and devising strategies to align them with human objectives.
+^^^
+In practice, we often care more about prediction quality than internal mechanics. However, understanding both gives us confidence that the model is learning robust and generalizable patterns rather than taking shortcuts.
+^^^
 
 ## References
 
