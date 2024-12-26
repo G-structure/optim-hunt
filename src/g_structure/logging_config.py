@@ -1,5 +1,6 @@
 import logging
 import os
+import datetime
 from typing import Optional
 
 def setup_logging(level: Optional[str] = None):
@@ -21,7 +22,7 @@ def setup_logging(level: Optional[str] = None):
     
     # Configure logging
     logging.basicConfig(
-        filename='logs/plot_generation.log',
+        filename=f'logs/gen-{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
         level=numeric_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         force=True  # This ensures the configuration is applied even if logging was previously configured
