@@ -1634,10 +1634,10 @@ wheels = [
 
 [[package]]
 name = "nvidia-nccl-cu12"
-version = "2.18.1"
+version = "2.19.3"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/05/23f8f38eec3d28e4915725b233c24d8f1a33cb6540a882f7b54be1befa02/nvidia_nccl_cu12-2.18.1-py3-none-manylinux1_x86_64.whl", hash = "sha256:1a6c4acefcbebfa6de320f412bf7866de856e786e0462326ba1bac40de0b5e71", size = 209797524 },
+    { url = "https://files.pythonhosted.org/packages/38/00/d0d4e48aef772ad5aebcf70b73028f88db6e5640b36c38e90445b7a57c45/nvidia_nccl_cu12-2.19.3-py3-none-manylinux1_x86_64.whl", hash = "sha256:a9734707a2c96443331c1e48c717024aa6678a0e2a4cb66b2c364d18cee6b48d", size = 165987969 },
 ]
 
 [[package]]
@@ -1688,7 +1688,7 @@ requires-dist = [
     { name = "plotly", specifier = ">=5.24.1" },
     { name = "scikit-learn", specifier = ">=1.6.0" },
     { name = "sentencepiece", specifier = ">=0.2.0" },
-    { name = "torch", specifier = ">=2.0.0" },
+    { name = "torch", path = "torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl" },
     { name = "transformer-lens", specifier = ">=2.10.0" },
 ]
 
@@ -2934,8 +2934,8 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.1.1"
-source = { registry = "https://pypi.org/simple" }
+version = "2.2.2+cu121"
+source = { path = "torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl" }
 dependencies = [
     { name = "filelock" },
     { name = "fsspec" },
@@ -2953,20 +2953,35 @@ dependencies = [
     { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'" },
     { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'" },
     { name = "sympy" },
-    { name = "triton", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'" },
+    { name = "triton", marker = "python_full_version < '3.12' and platform_machine == 'x86_64' and platform_system == 'Linux'" },
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/82/0966469ded5946cb4c18dd11b04eac78c943269fc79d290740d6477005e8/torch-2.1.1-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:5ebc43f5355a9b7be813392b3fb0133991f0380f6f0fcc8218d5468dc45d1071", size = 670166803 },
-    { url = "https://files.pythonhosted.org/packages/d2/f0/5cb5bb2ba2140015308245e37b140683c538cb2afe1f7567eda51eea2893/torch-2.1.1-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:84fefd63356416c0cd20578637ccdbb82164993400ed17b57c951dd6376dcee8", size = 84137834 },
-    { url = "https://files.pythonhosted.org/packages/11/e4/e8a947f36ae2be1223ea8bd8f4714ed6a7a47bf3c6b74705daa17bd127fa/torch-2.1.1-cp310-cp310-win_amd64.whl", hash = "sha256:0a7a9da0c324409bcb5a7bdad1b4e94e936d21c2590aaa7ac2f63968da8c62f7", size = 192313970 },
-    { url = "https://files.pythonhosted.org/packages/a1/0c/57bd3fd19758cdc4bd92637cfea9fcb9b3f65e38199e20a3605231a898f7/torch-2.1.1-cp310-none-macosx_10_9_x86_64.whl", hash = "sha256:1e1e5faddd43a8f2c0e0e22beacd1e235a2e447794d807483c94a9e31b54a758", size = 146978712 },
-    { url = "https://files.pythonhosted.org/packages/25/5d/22b4d5d2183e03f197a5e6b2721bb8f7a3e92b4947b16b70316c1e3771f3/torch-2.1.1-cp310-none-macosx_11_0_arm64.whl", hash = "sha256:e76bf3c5c354874f1da465c852a2fb60ee6cbce306e935337885760f080f9baa", size = 59555381 },
-    { url = "https://files.pythonhosted.org/packages/65/1f/de6bc1b246531db81d9a6afc491356b17d70e6c898e16f564970849f69b6/torch-2.1.1-cp311-cp311-manylinux1_x86_64.whl", hash = "sha256:98fea993639b0bb432dfceb7b538f07c0f1c33386d63f635219f49254968c80f", size = 670196704 },
-    { url = "https://files.pythonhosted.org/packages/72/d0/8e7157fe416f657e38736a42d9b0b82ef7f7af00398516200b59ebb5995e/torch-2.1.1-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:61b51b33c61737c287058b0c3061e6a9d3c363863e4a094f804bc486888a188a", size = 84152163 },
-    { url = "https://files.pythonhosted.org/packages/d6/a8/43e5033f9b2f727c158456e0720f870030ad3685c46f41ca3ca901b54922/torch-2.1.1-cp311-cp311-win_amd64.whl", hash = "sha256:1d70920da827e2276bf07f7ec46958621cad18d228c97da8f9c19638474dbd52", size = 192319208 },
-    { url = "https://files.pythonhosted.org/packages/63/e4/efa1029677516b7d8231dca794ad445127263029b703f56d9986554a640c/torch-2.1.1-cp311-none-macosx_10_9_x86_64.whl", hash = "sha256:a70593806f1d7e6b53657d96810518da0f88ef2608c98a402955765b8c79d52c", size = 146692145 },
-    { url = "https://files.pythonhosted.org/packages/5b/46/3def5bdaae03c21a7662673e6bda1f60a046afce48e0d6319ce4542bca31/torch-2.1.1-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:e312f7e82e49565f7667b0bbf9559ab0c597063d93044740781c02acd5a87978", size = 59562886 },
+    { filename = "torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl", hash = "sha256:badc14d413ff1847d15021a1ec0affa479d24dfc83e6d51b9b4b9fbfaad1b14c" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.3.1" },
+    { name = "nvidia-cuda-cupti-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.105" },
+    { name = "nvidia-cuda-nvrtc-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.105" },
+    { name = "nvidia-cuda-runtime-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.105" },
+    { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==8.9.2.26" },
+    { name = "nvidia-cufft-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==11.0.2.54" },
+    { name = "nvidia-curand-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==10.3.2.106" },
+    { name = "nvidia-cusolver-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==11.4.5.107" },
+    { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.0.106" },
+    { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==2.19.3" },
+    { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==12.1.105" },
+    { name = "opt-einsum", marker = "extra == 'opt-einsum'", specifier = ">=3.3" },
+    { name = "optree", marker = "extra == 'optree'", specifier = ">=0.9.1" },
+    { name = "sympy" },
+    { name = "triton", marker = "python_full_version < '3.12' and platform_machine == 'x86_64' and platform_system == 'Linux'", specifier = "==2.2.0" },
+    { name = "typing-extensions", specifier = ">=4.8.0" },
 ]
 
 [[package]]
@@ -3059,14 +3074,15 @@ wheels = [
 
 [[package]]
 name = "triton"
-version = "2.1.0"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock" },
+    { name = "filelock", marker = "python_full_version < '3.12'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/22/91a8af421c8a8902dde76e6ef3db01b258af16c53d81e8c0d0dc13900a9e/triton-2.1.0-0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:66439923a30d5d48399b08a9eae10370f6c261a5ec864a64983bae63152d39d7", size = 89215103 },
-    { url = "https://files.pythonhosted.org/packages/5c/c1/54fffb2eb13d293d9a429fead3646752ea190de0229bcf3d591ba2481263/triton-2.1.0-0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:919b06453f0033ea52c13eaf7833de0e57db3178d23d4e04f9fc71c4f2c32bf8", size = 89234153 },
+    { url = "https://files.pythonhosted.org/packages/95/05/ed974ce87fe8c8843855daa2136b3409ee1c126707ab54a8b72815c08b49/triton-2.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2294514340cfe4e8f4f9e5c66c702744c4a117d25e618bd08469d0bfed1e2e5", size = 167900779 },
+    { url = "https://files.pythonhosted.org/packages/bd/ac/3974caaa459bf2c3a244a84be8d17561f631f7d42af370fc311defeca2fb/triton-2.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:da58a152bddb62cafa9a857dd2bc1f886dbf9f9c90a2b5da82157cd2b34392b0", size = 167928356 },
+    { url = "https://files.pythonhosted.org/packages/0e/49/2e1bbae4542b8f624e409540b4197e37ab22a88e8685e99debe721cc2b50/triton-2.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0af58716e721460a61886668b205963dc4d1e4ac20508cc3f623aef0d70283d5", size = 167933985 },
 ]
 
 [[package]]

@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 def get_theme_sync_js():
     """
     Returns the JavaScript code for theme synchronization.
@@ -215,3 +219,131 @@ def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, incl
         plot_html += get_theme_sync_js()
     
     return plot_html
+
+def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value", 
+                hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
+    """
+    Creates a lightweight, themed plot suitable for web embedding.
+    
+    Args:
+        y_values: Tensor or list of values to plot
+        title: Plot title
+        labels: List of x-axis tick labels (optional)
+        x_label: Label for x-axis (default: "Layer")
+        y_label: Label for y-axis (default: "Value")
+        hover_mode: Plotly hover mode (default: "x unified")
+        include_theme_js: Whether to include the theme sync JavaScript (should only be True once)
+        include_plotlyjs: Whether to include the Plotly.js library (should only be True once)
+    
+    Returns:
+        str: HTML/JavaScript code for the plot
+    """
+    import plotly.graph_objects as go
+    
+    # Convert tensor to list if necessary
+    if hasattr(y_values, 'tolist'):
+        y_values = y_values.tolist()
+    
+    # Create the trace
+    trace = go.Scatter(
+        x=list(range(len(y_values))),
+        y=y_values,
+        mode='lines+markers',
+        line=dict(
+            color='#9ec5fe',
+            width=2
+        ),
+        marker=dict(
+            size=6,
+            color='#9ec5fe',
+            line=dict(
+                color='#1a1a1a',
+                width=1
+            )
+        ),
+        hovertemplate=f'{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+    )
+
+    # Create the layout
+    layout = go.Layout(
+        plot_bgcolor='rgba(26,26,26,0)',
+        paper_bgcolor='rgba(26,26,26,0)',
+        margin=dict(l=50, r=20, t=50, b=50, pad=4),
+        xaxis=dict(
+            title=x_label,
+            gridcolor='#444',
+            ticktext=labels if labels is not None else None,
+            tickvals=list(range(len(labels))) if labels is not None else None,
+            tickmode='array' if labels is not None else 'auto',
+            showgrid=True,
+            zeroline=False,
+            color='#e0e0e0'
+        ),
+        yaxis=dict(
+            title=y_label,
+            gridcolor='#444',
+            showgrid=True,
+            zeroline=False,
+            color='#e0e0e0'
+        ),
+        title=dict(
+            text=title,
+            font=dict(
+                size=14,
+                color='#e0e0e0'
+            ),
+            x=0.5,
+            xanchor='center'
+        ),
+        hoverlabel=dict(
+            bgcolor='#333',
+            font_size=12,
+            font_family="monospace"
+        ),
+        hovermode=hover_mode,
+        autosize=True
+    )
+
+    # Create figure
+    fig = go.Figure(data=[trace], layout=layout)
+
+    config = {
+        'displayModeBar': False,
+        'staticPlot': False,
+        'responsive': True,
+    }
+    
+    # Generate plot HTML with controlled script inclusion
+    plot_html = f"""
+    <div class="plot-container">
+        {fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if include_plotlyjs else False,
+            config=config
+        )}
+    </div>
+    """
+    
+    # Add theme sync JavaScript if requested
+    if include_theme_js:
+        plot_html += get_theme_sync_js()
+    
+    return plot_html
+
+def with_identifier(identifier):
+    """
+    Decorator to wrap output in a div with an identifier.
+    Can be used with any function that returns HTML content.
+    
+    Usage:
+    @with_identifier("my-plot-1")
+    def create_plot(...):
+        ...
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            logger.info(f"Creating plot with identifier: {identifier}")
+            output = func(*args, **kwargs)
+            return f'<div id="{identifier}" class="identified-content">{output}</div>'
+        return wrapper
+    return decorator
