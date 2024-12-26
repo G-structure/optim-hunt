@@ -104,6 +104,34 @@ By composing multiple layers, each performing a gradient update, Transformers ca
 
 Armed with this understanding, we turned to experiments on Llama 3.1 (8B) to see if similar dynamics occur in practice. We presented the model with sequences of (feature, output) pairs from a known linear relationship and then asked it to predict the output for a new input. The surprising result: Llama 3.1 surpassed naive methods like k-nearest neighbors, suggesting it might be performing in-context optimization.
 
+Let's evluate the models ablities to predict the value for the Friedman #2 dataset, a synthetic regression problem that combines both linear and non-linear relationships:
+\[
+y = (x_1^2 + (x_2 x_3 - \frac{1}{x_2 x_4})^2)^{1/2}
+\]
+
+This dataset is particularly useful because:
+1. It has a known ground truth function
+2. It combines both linear and non-linear terms
+3. It provides a controlled environment for testing regression capabilities
+
+We construct a prompt for the model where each line contains features \((x_1, x_2, ..., x_n)\) and their corresponding output \(y\). Here's how we structure the prompt to test Llama's regression abilities:
+^^^
+Couldn't the model just plug the features into the Friedman formula to get y? No - while we know these examples were generated using the Friedman formula, the model only sees raw numbers in the prompt without any formula. It must infer the mathematical relationship between inputs and outputs purely from the three example pairs, making this a genuine test of whether it can learn and apply functions through in-context learning.
+^^^
+```python
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.utils import slice_dataset, prepare_prompt
+
+seq_len = 3
+
+x_train, y_train, x_test, y_test = get_dataset_friedman_2()
+
+x_train, y_train, x_test, y_test =  slice_dataset(x_train, y_train, x_test, y_test, seq_len)
+prompt = prepare_prompt(x_train, y_train, x_test)
+
+print(prompt)
+```
+
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
