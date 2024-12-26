@@ -25,7 +25,7 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import create_logit_lens_plot, get_theme_sync_js, create_plot, with_identifier
+from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
 from typing import List, Tuple
@@ -176,7 +176,7 @@ def generate_logit_diff_plots(dataset, regressors):
         # Generate plots with unique identifiers for each
         @with_identifier(f"logit-lens-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
         def create_logit_lens_plot_with_id():
-            return create_plot(
+            return create_line_plot(
                 y_values=logit_lens_logit_diffs,
                 title=f"Average Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
                 labels=labels,
@@ -333,7 +333,7 @@ def generate_logit_diff_batched(dataset, regressors):
         # Generate plots with unique identifiers for each
         @with_identifier(f"logit-lens-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
         def create_logit_lens_plot_with_id():
-            return create_plot(
+            return create_line_plot(
                 y_values=avg_logit_lens_diffs,
                 title=f"Average Logit Difference From Accumulated Residual Stream for {token_pairs_names[i]}",
                 labels=labels,
@@ -346,7 +346,7 @@ def generate_logit_diff_batched(dataset, regressors):
 
         @with_identifier(f"per-layer-plot-{token_pairs_names[i].lower().replace(' ', '-')}")
         def create_per_layer_plot_with_id():
-            return create_plot(
+            return create_line_plot(
                 y_values=avg_per_layer_diffs,
                 title=f"Average Per Layer Logit Difference for {token_pairs_names[i]}",
                 labels=labels,

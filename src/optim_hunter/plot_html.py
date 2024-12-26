@@ -1,226 +1,140 @@
+import plotly.graph_objects as go
 import logging
 
 logger = logging.getLogger(__name__)
+
+THEME_COLORS = {
+    'light': {
+        'plot_bgcolor': 'rgba(253,246,227,0)',
+        'paper_bgcolor': 'rgba(253,246,227,0)',
+        'gridcolor': '#93a1a1',
+        'text_color': '#073642',
+        'bar_color': '#2075c7',
+    },
+    'dark': {
+        'plot_bgcolor': 'rgba(26,26,26,0)',
+        'paper_bgcolor': 'rgba(26,26,26,0)',
+        'gridcolor': '#444',
+        'text_color': '#e0e0e0',
+        'bar_color': '#9ec5fe',
+    }
+}
 
 def get_theme_sync_js():
     """
     Returns the JavaScript code for theme synchronization.
     This should be included once in the page.
     """
-    return """
+    return f"""
     <script>
-    (function() {
-        function updatePlotTheme(plotDiv, isLight) {
+    (function() {{
+        function updatePlotTheme(plotDiv, isLight) {{
             console.log('Updating plot theme for', plotDiv.id, 'isLight:', isLight);
-            try {
-                if (isLight) {
-                    Plotly.relayout(plotDiv, {
-                        'plot_bgcolor': 'rgba(253,246,227,0)',
-                        'paper_bgcolor': 'rgba(253,246,227,0)',
-                        'xaxis.gridcolor': '#93a1a1',
-                        'yaxis.gridcolor': '#93a1a1',
-                        'xaxis.color': '#073642',
-                        'yaxis.color': '#073642',
-                        'title.font.color': '#073642',
+            try {{
+                if (isLight) {{
+                    Plotly.relayout(plotDiv, {{
+                        'plot_bgcolor': '{THEME_COLORS["light"]["plot_bgcolor"]}',
+                        'paper_bgcolor': '{THEME_COLORS["light"]["paper_bgcolor"]}',
+                        'xaxis.gridcolor': '{THEME_COLORS["light"]["gridcolor"]}',
+                        'yaxis.gridcolor': '{THEME_COLORS["light"]["gridcolor"]}',
+                        'xaxis.color': '{THEME_COLORS["light"]["text_color"]}',
+                        'yaxis.color': '{THEME_COLORS["light"]["text_color"]}',
+                        'title.font.color': '{THEME_COLORS["light"]["text_color"]}',
                         'autosize': true
-                    });
-                    Plotly.restyle(plotDiv, {
-                        'line.color': '#2075c7',
-                        'marker.color': '#2075c7',
-                        'marker.line.color': '#fdf6e3'
-                    });
-                } else {
-                    Plotly.relayout(plotDiv, {
-                        'plot_bgcolor': 'rgba(26,26,26,0)',
-                        'paper_bgcolor': 'rgba(26,26,26,0)',
-                        'xaxis.gridcolor': '#444',
-                        'yaxis.gridcolor': '#444',
-                        'xaxis.color': '#e0e0e0',
-                        'yaxis.color': '#e0e0e0',
-                        'title.font.color': '#e0e0e0',
+                    }});
+                    Plotly.restyle(plotDiv, {{
+                        'line.color': '{THEME_COLORS["light"]["bar_color"]}',
+                        'marker.color': '{THEME_COLORS["light"]["bar_color"]}',
+                        'marker.line.color': '{THEME_COLORS["light"]["plot_bgcolor"]}'
+                    }});
+                }} else {{
+                    Plotly.relayout(plotDiv, {{
+                        'plot_bgcolor': '{THEME_COLORS["dark"]["plot_bgcolor"]}',
+                        'paper_bgcolor': '{THEME_COLORS["dark"]["paper_bgcolor"]}',
+                        'xaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
+                        'yaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
+                        'xaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
+                        'yaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
+                        'title.font.color': '{THEME_COLORS["dark"]["text_color"]}',
                         'autosize': true
-                    });
-                    Plotly.restyle(plotDiv, {
-                        'line.color': '#9ec5fe',
-                        'marker.color': '#9ec5fe',
-                        'marker.line.color': '#1a1a1a'
-                    });
-                }
+                    }});
+                    Plotly.restyle(plotDiv, {{
+                        'line.color': '{THEME_COLORS["dark"]["bar_color"]}',
+                        'marker.color': '{THEME_COLORS["dark"]["bar_color"]}',
+                        'marker.line.color': '{THEME_COLORS["dark"]["plot_bgcolor"]}'
+                    }});
+                }}
                 
                 // Force a resize after theme update
                 window.dispatchEvent(new Event('resize'));
                 
-            } catch (e) {
+            }} catch (e) {{
                 console.error('Error updating plot theme:', e);
-            }
-        }
+            }}
+        }}
 
         // In template.html, modify the theme change handler
-        function updateAllPlots() {
+        function updateAllPlots() {{
             // Debounce the update
-            if (window.plotUpdateTimeout) {
+            if (window.plotUpdateTimeout) {{
                 clearTimeout(window.plotUpdateTimeout);
-            }
+            }}
             
-            window.plotUpdateTimeout = setTimeout(() => {
+            window.plotUpdateTimeout = setTimeout(() => {{
                 const isLight = document.body.classList.contains('light-theme');
                 const plots = document.querySelectorAll('.plotly-graph-div');
                 
                 // Update plots in batches
                 const batchSize = 3;
-                for (let i = 0; i < plots.length; i += batchSize) {
-                    setTimeout(() => {
+                for (let i = 0; i < plots.length; i += batchSize) {{
+                    setTimeout(() => {{
                         const batch = Array.from(plots).slice(i, i + batchSize);
                         batch.forEach(plot => updatePlotTheme(plot, isLight));
-                    }, Math.floor(i/batchSize) * 100);
-                }
-            }, 250);
-        }
+                    }}, Math.floor(i/batchSize) * 100);
+                }}
+            }}, 250);
+        }}
 
         // Add resize handler with debouncing
-        window.addEventListener('resize', function() {
-            if (window.resizeTimeout) {
+        window.addEventListener('resize', function() {{
+            if (window.resizeTimeout) {{
                 clearTimeout(window.resizeTimeout);
-            }
-            window.resizeTimeout = setTimeout(function() {
-                document.querySelectorAll('.plotly-graph-div').forEach(function(plot) {
+            }}
+            window.resizeTimeout = setTimeout(function() {{
+                document.querySelectorAll('.plotly-graph-div').forEach(function(plot) {{
                     Plotly.Plots.resize(plot);
-                });
-            }, 250);
-        });
+                }});
+            }}, 250);
+        }});
 
         // Wait for Plotly to be fully loaded
-        function ensurePlotly() {
-            if (window.Plotly) {
+        function ensurePlotly() {{
+            if (window.Plotly) {{
                 console.log('Plotly loaded, setting up theme handling');
                 // Initial theme setup
                 updateAllPlots();
                 
                 // Listen for theme changes
-                document.body.addEventListener('themeChanged', function(e) {
+                document.body.addEventListener('themeChanged', function(e) {{
                     console.log('Theme changed event received');
                     updateAllPlots();
-                });
+                }});
 
                 // Initial resize to ensure proper dimensions
                 window.dispatchEvent(new Event('resize'));
-            } else {
+            }} else {{
                 console.log('Waiting for Plotly...');
                 setTimeout(ensurePlotly, 100);
-            }
-        }
+            }}
+        }}
 
         // Start checking for Plotly
         ensurePlotly();
-    })();
+    }})();
     </script>
     """
-
-def create_logit_lens_plot(logit_lens_logit_diffs, labels, comparison_name, include_theme_js=False, include_plotlyjs=False):
-    """
-    Creates a lightweight, themed logit lens plot suitable for web embedding.
-    
-    Args:
-        logit_lens_logit_diffs: Tensor of logit differences
-        labels: List of layer labels
-        comparison_name: Name of the comparison being plotted
-        include_theme_js: Whether to include the theme sync JavaScript (should only be True once)
-        include_plotlyjs: Whether to include the Plotly.js library (should only be True once)
-    
-    Returns:
-        str: HTML/JavaScript code for the plot
-    """
-    import plotly.graph_objects as go
-    
-    # Convert tensor to list
-    logit_diffs = logit_lens_logit_diffs.tolist()
-    
-    # Create the trace
-    trace = go.Scatter(
-        x=list(range(len(logit_diffs))),
-        y=logit_diffs,
-        mode='lines+markers',
-        line=dict(
-            color='#9ec5fe',
-            width=2
-        ),
-        marker=dict(
-            size=6,
-            color='#9ec5fe',
-            line=dict(
-                color='#1a1a1a',
-                width=1
-            )
-        ),
-        hovertemplate='Layer: %{x}<br>Logit Diff: %{y:.3f}<extra></extra>'
-    )
-
-    # Create the layout
-    layout = go.Layout(
-        plot_bgcolor='rgba(26,26,26,0)',
-        paper_bgcolor='rgba(26,26,26,0)',
-        margin=dict(l=50, r=20, t=50, b=50, pad=4),
-        xaxis=dict(
-            title='Layer',
-            gridcolor='#444',
-            ticktext=labels,
-            tickvals=list(range(len(labels))),
-            tickmode='array',
-            showgrid=True,
-            zeroline=False,
-            color='#e0e0e0'
-        ),
-        yaxis=dict(
-            title='Logit Difference',
-            gridcolor='#444',
-            showgrid=True,
-            zeroline=False,
-            color='#e0e0e0'
-        ),
-        title=dict(
-            text=f'Logit Difference Across Layers<br><sub>{comparison_name}</sub>',
-            font=dict(
-                size=14,
-                color='#e0e0e0'
-            ),
-            x=0.5,
-            xanchor='center'
-        ),
-        hoverlabel=dict(
-            bgcolor='#333',
-            font_size=12,
-            font_family="monospace"
-        ),
-        autosize=True
-    )
-
-    # Create figure
-    fig = go.Figure(data=[trace], layout=layout)
-
-    config = {
-        'displayModeBar': False,
-        'staticPlot': False,
-        'responsive': True,  # Enable responsiveness
-    }
-    
-    # Generate plot HTML with controlled script inclusion
-    plot_html = f"""
-    <div class="plot-container">
-        {fig.to_html(
-            full_html=False,
-            include_plotlyjs='cdn' if include_plotlyjs else False,
-            config=config
-        )}
-    </div>
-    """
-    
-    # Add theme sync JavaScript if requested
-    if include_theme_js:
-        plot_html += get_theme_sync_js()
-    
-    return plot_html
-
-def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value", 
+  
+def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Value", 
                 hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
     """
     Creates a lightweight, themed plot suitable for web embedding.
@@ -237,9 +151,7 @@ def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
     
     Returns:
         str: HTML/JavaScript code for the plot
-    """
-    import plotly.graph_objects as go
-    
+    """    
     # Convert tensor to list if necessary
     if hasattr(y_values, 'tolist'):
         y_values = y_values.tolist()
@@ -250,14 +162,14 @@ def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
         y=y_values,
         mode='lines+markers',
         line=dict(
-            color='#9ec5fe',
+            color=THEME_COLORS['dark']['bar_color'],
             width=2
         ),
         marker=dict(
             size=6,
-            color='#9ec5fe',
+            color=THEME_COLORS['dark']['bar_color'],
             line=dict(
-                color='#1a1a1a',
+                color=THEME_COLORS['dark']['plot_bgcolor'],
                 width=1
             )
         ),
@@ -266,31 +178,31 @@ def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
 
     # Create the layout
     layout = go.Layout(
-        plot_bgcolor='rgba(26,26,26,0)',
-        paper_bgcolor='rgba(26,26,26,0)',
+        plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
+        paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
         margin=dict(l=50, r=20, t=50, b=50, pad=4),
         xaxis=dict(
             title=x_label,
-            gridcolor='#444',
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
             ticktext=labels if labels is not None else None,
             tickvals=list(range(len(labels))) if labels is not None else None,
             tickmode='array' if labels is not None else 'auto',
             showgrid=True,
             zeroline=False,
-            color='#e0e0e0'
+            color=THEME_COLORS['dark']['text_color']
         ),
         yaxis=dict(
             title=y_label,
-            gridcolor='#444',
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
             showgrid=True,
             zeroline=False,
-            color='#e0e0e0'
+            color=THEME_COLORS['dark']['text_color']
         ),
         title=dict(
             text=title,
             font=dict(
                 size=14,
-                color='#e0e0e0'
+                color=THEME_COLORS['dark']['text_color']
             ),
             x=0.5,
             xanchor='center'
@@ -314,6 +226,108 @@ def create_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
     }
     
     # Generate plot HTML with controlled script inclusion
+    plot_html = f"""
+    <div class="plot-container">
+        {fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if include_plotlyjs else False,
+            config=config
+        )}
+    </div>
+    """
+    
+    # Add theme sync JavaScript if requested
+    if include_theme_js:
+        plot_html += get_theme_sync_js()
+    
+    return plot_html
+
+def create_bar_plot(
+    x_values: list,
+    y_values: list,
+    title: str,
+    x_label: str = "",
+    y_label: str = "",
+    include_theme_js: bool = False,
+    include_plotlyjs: bool = False,
+    hover_template: str = None
+) -> str:
+    """
+    Creates a themed bar plot suitable for web embedding.
+    
+    Args:
+        x_values: List of x-axis values (categories)
+        y_values: List of y-axis values (heights)
+        title: Plot title
+        x_label: Label for x-axis
+        y_label: Label for y-axis
+        include_theme_js: Whether to include theme sync JavaScript
+        include_plotlyjs: Whether to include Plotly.js library
+        hover_template: Custom hover template (optional)
+    
+    Returns:
+        str: HTML/JavaScript code for the plot
+    """
+    # Create the trace
+    trace = go.Bar(
+        x=x_values,
+        y=y_values,
+        marker=dict(
+            color='#9ec5fe',  # Default to dark theme color
+            line=dict(
+                color='#1a1a1a',
+                width=1
+            )
+        ),
+        hovertemplate=hover_template if hover_template else f"{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>"
+    )
+
+    # Create the layout
+    layout = go.Layout(
+        plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
+        paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
+        margin=dict(l=50, r=20, t=50, b=50, pad=4),
+        xaxis=dict(
+            title=x_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        yaxis=dict(
+            title=y_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        title=dict(
+            text=title,
+            font=dict(
+                size=14,
+                color=THEME_COLORS['dark']['text_color']
+            ),
+            x=0.5,
+            xanchor='center'
+        ),
+        hoverlabel=dict(
+            bgcolor='#333',
+            font_size=12,
+            font_family="monospace"
+        ),
+        autosize=True
+    )
+
+    # Create figure
+    fig = go.Figure(data=[trace], layout=layout)
+
+    config = {
+        'displayModeBar': False,
+        'staticPlot': False,
+        'responsive': True,
+    }
+    
+    # Generate plot HTML
     plot_html = f"""
     <div class="plot-container">
         {fig.to_html(
