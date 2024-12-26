@@ -25,13 +25,13 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_bar_plot
+from g_structure.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_bar_plot
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
 from typing import List, Tuple
 
 import logging
-from optim_hunter.logging_config import setup_logging
+from g_structure.logging_config import setup_logging
 
 # Set up logging
 setup_logging("DEBUG")

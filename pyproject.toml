@@ -16,6 +16,7 @@ dependencies = [
     "sentencepiece>=0.2.0",
     "bitsandbytes>=0.45.0",
     "torch",
+    "g_structure",
 ]
 
 [build-system]
@@ -26,3 +27,4 @@ build-backend = "hatchling.build"
 circuitsvis = { git = "https://github.com/callummcdougall/CircuitsVis.git", subdirectory = "python" }
 neel-plotly = { git = "https://github.com/neelnanda-io/neel-plotly" }
 torch = { path = "./torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl" }
+g_structure = { path = "./src/g_structure" }
