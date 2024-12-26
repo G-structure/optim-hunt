@@ -567,3 +567,173 @@ def baseline_constant(x_train, x_test, y_train, y_test, random_state=1, **kwargs
         'y_test'    : y_test,
         'y_predict' : y_predict,
     }
+
+def linear_regression_manual_gd(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
+    """
+    Linear regression using manual gradient descent steps.
+    
+    Parameters:
+    - steps: number of gradient descent steps (default: 2)
+    - learning_rate: step size for gradient descent (default: 0.01)
+    """
+    steps = kwargs.get('steps', 2)
+    learning_rate = kwargs.get('learning_rate', 0.01)
+    
+    # Convert to numpy arrays if they aren't already
+    x_train = x_train.to_numpy() if hasattr(x_train, 'to_numpy') else np.array(x_train)
+    y_train = y_train.to_numpy() if hasattr(y_train, 'to_numpy') else np.array(y_train)
+    x_test = x_test.to_numpy() if hasattr(x_test, 'to_numpy') else np.array(x_test)
+    y_test = y_test.to_numpy() if hasattr(y_test, 'to_numpy') else np.array(y_test)
+    
+    # Initialize parameters (weights and bias)
+    n_features = x_train.shape[1]
+    weights = np.zeros(n_features)
+    bias = 0
+    
+    # Perform gradient descent steps
+    m = len(x_train)
+    for _ in range(steps):
+        # Forward pass
+        y_pred = np.dot(x_train, weights) + bias
+        
+        # Compute gradients
+        dw = (1/m) * np.dot(x_train.T, (y_pred - y_train))
+        db = (1/m) * np.sum(y_pred - y_train)
+        
+        # Update parameters
+        weights = weights - learning_rate * dw
+        bias = bias - learning_rate * db
+    
+    # Make predictions on test set
+    y_predict = np.dot(x_test, weights) + bias
+
+    return {
+        'model_name': f'linear_regression_gd_{steps}_steps',
+        'x_train'   : x_train,
+        'x_test'    : x_test,
+        'y_train'   : y_train,
+        'y_test'    : y_test,
+        'y_predict' : y_predict,
+    }
+
+def create_linear_regression_gd_variants(
+    steps_options=[1, 2, 3, 4],
+    learning_rates=[0.0001, 0.001, 0.01, 0.1, 0.5, 1.0],
+    init_weights_options=['zeros', 'ones', 'random', 'random_uniform'],
+    momentum_values=[0.0, 0.5, 0.9],  # 0.0 means no momentum
+    lr_schedules=['constant', 'linear_decay', 'exponential_decay']
+):
+    """
+    Factory function that creates multiple variants of linear regression with gradient descent,
+    each with different hyperparameters.
+    
+    Args:
+        steps_options (list): Number of gradient descent steps to try
+        learning_rates (list): Learning rates to try
+        init_weights_options (list): Weight initialization strategies to try
+        momentum_values (list): Momentum values to try (0.0 means no momentum)
+        lr_schedules (list): Learning rate schedule strategies to try
+    
+    Returns:
+        List of functions, each implementing linear regression with specific hyperparameters
+    """
+    variants = []
+    
+    # Create all combinations of hyperparameters
+    configs = []
+    for steps in steps_options:
+        for lr in learning_rates:
+            for init in init_weights_options:
+                for momentum in momentum_values:
+                    for lr_schedule in lr_schedules:
+                        configs.append({
+                            'steps': steps,
+                            'learning_rate': lr,
+                            'init_weights': init,
+                            'momentum': momentum,
+                            'lr_schedule': lr_schedule
+                        })
+    
+    def create_gd_function(steps, learning_rate, init_weights, momentum, lr_schedule):
+        def linear_regression_gd(x_train, x_test, y_train, y_test, random_state=1):
+            # Convert to numpy arrays
+            x_train = x_train.to_numpy() if hasattr(x_train, 'to_numpy') else np.array(x_train)
+            y_train = y_train.to_numpy() if hasattr(y_train, 'to_numpy') else np.array(y_train)
+            x_test = x_test.to_numpy() if hasattr(x_test, 'to_numpy') else np.array(x_test)
+            y_test = y_test.to_numpy() if hasattr(y_test, 'to_numpy') else np.array(y_test)
+            
+            # Initialize parameters
+            n_features = x_train.shape[1]
+            np.random.seed(random_state)
+            
+            if init_weights == 'zeros':
+                weights = np.zeros(n_features)
+            elif init_weights == 'ones':
+                weights = np.ones(n_features)
+            elif init_weights == 'random':
+                weights = np.random.randn(n_features) * 0.01
+            elif init_weights == 'random_uniform':
+                weights = np.random.uniform(-0.01, 0.01, n_features)
+            
+            bias = 0
+            
+            # Initialize momentum vectors if using momentum
+            if momentum > 0:
+                v_weights = np.zeros_like(weights)
+                v_bias = 0
+            
+            # Perform gradient descent steps
+            m = len(x_train)
+            for step in range(steps):
+                # Compute effective learning rate based on schedule
+                if lr_schedule == 'constant':
+                    current_lr = learning_rate
+                elif lr_schedule == 'linear_decay':
+                    current_lr = learning_rate * (1 - step/steps)
+                elif lr_schedule == 'exponential_decay':
+                    current_lr = learning_rate * (0.95 ** step)
+                
+                # Forward pass
+                y_pred = np.dot(x_train, weights) + bias
+                
+                # Compute gradients
+                dw = (1/m) * np.dot(x_train.T, (y_pred - y_train))
+                db = (1/m) * np.sum(y_pred - y_train)
+                
+                # Apply momentum if using it
+                if momentum > 0:
+                    v_weights = momentum * v_weights - current_lr * dw
+                    v_bias = momentum * v_bias - current_lr * db
+                    weights += v_weights
+                    bias += v_bias
+                else:
+                    weights = weights - current_lr * dw
+                    bias = bias - current_lr * db
+            
+            # Make predictions
+            y_predict = np.dot(x_test, weights) + bias
+
+            return {
+                'model_name': f'lr_gd_s{steps}_lr{learning_rate}_i{init_weights}_m{momentum}_sc{lr_schedule}',
+                'x_train'   : x_train,
+                'x_test'    : x_test,
+                'y_train'   : y_train,
+                'y_test'    : y_test,
+                'y_predict' : y_predict,
+            }
+        
+        return linear_regression_gd
+    
+    # Create a function for each configuration
+    for config in configs:
+        variants.append(
+            create_gd_function(
+                steps=config['steps'],
+                learning_rate=config['learning_rate'],
+                init_weights=config['init_weights'],
+                momentum=config['momentum'],
+                lr_schedule=config['lr_schedule']
+            )
+        )
+    
+    return variants
