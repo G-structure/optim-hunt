@@ -1,8 +1,6 @@
 import logging
 import os
 from typing import Optional
-import sys
-from functools import wraps
 
 def setup_logging(level: Optional[str] = None):
     """
