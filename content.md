@@ -133,6 +133,16 @@ print(prompt)
 ```
 
 ```python
+from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
+from optim_hunter.datasets import get_dataset_friedman_2
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random ]
+
+compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors)
+```
+
+```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
