@@ -27,6 +27,23 @@
   (println "Saving" (count cache) "outputs to cache")
   (spit cache-file (json/generate-string cache)))
 
+;; --- Code formating
+(defn wrap-code-block [code lang]
+  (format "<div class=\"code-block\"><pre class=\"line-numbers\"><code class=\"language-%s\">%s</code></pre></div>"
+          lang
+          (-> code
+              (str/replace "<" "&lt;")
+              (str/replace ">" "&gt;"))))
+
+(defn process-code-blocks [content]
+  (println "\n=== Processing Code Blocks ===")
+  ;; Handle regular markdown code blocks
+  (let [code-block-pattern #"(?ms)```(\w+)\n(.*?)\n```"]
+    (str/replace content code-block-pattern
+                (fn [[_ lang code]]
+                  (when-not (str/includes? content (format "<<execute") )
+                    (wrap-code-block code lang))))))
+
 ;; --- Code Execution and Processing ---
 (defn is-html? [s]
   (or (str/starts-with? (str/trim s) "<")
@@ -151,16 +168,17 @@
               (swap! cache assoc (:id block) processed)
               (println "Cached new output for block" (:id block)))))))
 
-    ;; Replace blocks in content
+    ;; Replace blocks in content with both code display and output
     (let [final-content (reduce (fn [content block]
                                 (let [block-output (get @cache (:id block))
+                                      code-display (wrap-code-block (:code block) "python")
                                       output-tag (str "<<output id=\"" (:id block) "\">><</output>>")]
                                   (if block-output
                                     (-> content
                                         (str/replace (:full-match block)
                                                    (if (str/includes? content output-tag)
-                                                     "" ; Remove execute block if output tag exists
-                                                     block-output))
+                                                     code-display ; Show code but remove execute block
+                                                     (str code-display block-output)))
                                         (str/replace output-tag block-output))
                                     (do
                                       (println "Warning: No cached output for block" (:id block))
@@ -209,6 +227,7 @@
         _ (println "Content after frontmatter length:" (count content))
         executed-content (execute-blocks content compute-id)
         processed-content (-> executed-content
+                            process-code-blocks
                             process-sidenotes
                             markdown->html)
         template (slurp template-file)
