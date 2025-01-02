@@ -5,6 +5,26 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Transformer Circuits and Attention Patterns</title>
 
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+
+        <!-- Add Prism.js JavaScript -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+
+        <script>
+            // Initialize Prism
+            document.addEventListener('DOMContentLoaded', (event) => {
+                Prism.highlightAll();
+            });
+
+            // Reinitialize Prism when theme changes
+            document.body.addEventListener('themeChanged', () => {
+                Prism.highlightAll();
+            });
+        </script>
+
         <!-- Adding MathJax for equation rendering -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/js-polyfills/0.1.43/polyfill.min.js" integrity="sha512-lvWiOP+aMKHllm4THsjzNleVuGOh0WGniJ3lgu/nvCbex1LlaQSxySUjAu/LTJw9FhnSL/PVYoQcckg1Q03+fQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
         <script
@@ -398,6 +418,60 @@
             }
             .light-theme .code-block .operator {
                 color: #6c71c4;
+            }
+
+            /* Prism.js theme overrides */
+            .light-theme :not(pre) > code[class*="language-"],
+            .light-theme pre[class*="language-"] {
+                background: #f5f2f0;
+                color: #333;
+            }
+
+            .light-theme .token.comment,
+            .light-theme .token.prolog,
+            .light-theme .token.doctype,
+            .light-theme .token.cdata {
+                color: #998;
+                font-style: italic;
+            }
+
+            .light-theme .token.function {
+                color: #dd4a68;
+            }
+
+            .light-theme .token.number {
+                color: #905;
+            }
+
+            .light-theme .token.string {
+                color: #690;
+            }
+
+            .light-theme .token.operator {
+                color: #9a6e3a;
+            }
+
+            /* Line numbers styling */
+            pre.line-numbers {
+                position: relative;
+                padding-left: 3.8em;
+                counter-reset: linenumber;
+            }
+
+            .line-numbers .line-numbers-rows {
+                position: absolute;
+                pointer-events: none;
+                top: 0;
+                font-size: 100%;
+                left: -3.8em;
+                width: 3em;
+                letter-spacing: -1px;
+                border-right: 1px solid #999;
+                user-select: none;
+            }
+
+            .light-theme .line-numbers-rows {
+                border-right-color: #ccc;
             }
 
             .mjx-math {
