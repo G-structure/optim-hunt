@@ -1,15 +1,178 @@
 #!/usr/bin/env bb
 
 (require '[clojure.string :as str]
-         '[clojure.java.shell :as shell])
+         '[clojure.java.shell :as shell]
+         '[clojure.java.io :as io]
+         '[cheshire.core :as json])
 
 ;; --- Config ---
 (def template-file "template.html")
 (def content-file "content.md")
 (def output-file "index.html")
+(def cache-file ".code-outputs.json")
 
-;; Parse YAML frontmatter
+;; --- Cache Management ---
+(defn load-cache []
+  (println "\n=== Loading Cache ===")
+  (try
+    (let [cache (json/parse-string (slurp cache-file))]
+      (println "Loaded" (count cache) "cached outputs")
+      cache)
+    (catch Exception _
+      (println "No cache file found or error reading cache. Starting with empty cache.")
+      {})))
+
+(defn save-cache [cache]
+  (println "\n=== Saving Cache ===")
+  (println "Saving" (count cache) "outputs to cache")
+  (spit cache-file (json/generate-string cache)))
+
+;; --- Code Execution and Processing ---
+(defn is-html? [s]
+  (or (str/starts-with? (str/trim s) "<")
+      (str/starts-with? (str/trim s) "<!DOCTYPE")))
+
+(defn run-python [code]
+  (println "\n=== Executing Python Code ===")
+  (println "Code to execute:\n" code)
+  (let [res (shell/sh "python3" "-c" code)]
+    (if (zero? (:exit res))
+      (let [output (:out res)]
+        (println "Execution successful. Output length:" (count output))
+        (if (is-html? output)
+          output
+          (str "<pre class=\"code-output\">" output "</pre>")))
+      (do
+        (println "Error running python code:" (:err res))
+        (str "<pre class=\"code-error\">" (:err res) "</pre>")))))
+
+(defn markdown->html [markdown]
+  (println "\n=== Converting Markdown to HTML ===")
+  (let [res (shell/sh "pandoc"
+                      "--from=markdown+tex_math_dollars+tex_math_single_backslash"
+                      "--to=html"
+                      "--mathjax"
+                      "--wrap=none"
+                      :in markdown)]
+    (if (zero? (:exit res))
+      (do
+        (println "Conversion successful")
+        (:out res))
+      (do (println "Pandoc error:" (:err res))
+          markdown))))
+
+(defn process-sidenotes [content]
+  (println "\n=== Processing Sidenotes ===")
+  (let [sidenote-pattern #"(?s)\^\^\^(.*?)\^\^\^"
+        matches (re-seq sidenote-pattern content)]
+    (println "Found" (count matches) "sidenotes")
+    (let [process-single-sidenote (fn [[_ note-content]]
+                                   (let [processed-content (markdown->html note-content)]
+                                     (format "<div class=\"sidenote\">%s</div>"
+                                           (str/trim processed-content))))]
+      (str/replace content sidenote-pattern process-single-sidenote))))
+
+;; --- Block Parsing ---
+(defn parse-execute-tag [tag]
+  (let [id-match (re-find #"id=\"(\d+)\"" tag)
+        output-match (re-find #"output=\"(raw|pandoc)\"" tag)]
+    (when (not id-match)
+      (throw (Exception. "Execute tag missing required id attribute")))
+    {:id (second id-match)
+     :output-type (or (second output-match) "raw")}))
+
+(defn find-code-blocks [content]
+  (println "\n=== Finding Code Blocks ===")
+  (let [block-pattern #"(?ms)<<execute\s+id=\"(\d+)\"\s+output=\"([^\"]+)\">>\s*```python\n(.*?)\n```\s*<<\/execute>>"
+        matches (re-seq block-pattern content)]
+    (println "Found" (count matches) "code blocks")
+    (doseq [[_ id output-type code] matches]
+      (println "\nBlock ID:" id)
+      (println "Output type:" output-type)
+      (println "Code preview:" (subs code 0 (min 50 (count code))) "..."))
+
+    (let [blocks (map (fn [[full-match id output-type code]]
+                       {:id id
+                        :output-type output-type
+                        :code (str/trim code)
+                        :full-match full-match})
+                     matches)]
+      (let [ids (map :id blocks)
+            duplicates (keep (fn [[id freq]] (when (> freq 1) id))
+                           (frequencies ids))]
+        (when (seq duplicates)
+          (throw (Exception. (str "Duplicate block IDs found: " (str/join ", " duplicates)))))
+        blocks))))
+
+;; --- Output Processing ---
+(defn process-output [output output-type]
+  (println "\n=== Processing Output ===")
+  (println "Processing output of type:" output-type)
+  (case output-type
+    "raw" (do (println "Using raw output") output)
+    "pandoc" (do
+               (println "Converting output through pandoc")
+               (let [res (shell/sh "pandoc" "--from=markdown" "--to=html"
+                                 :in output)]
+                 (if (zero? (:exit res))
+                   (:out res)
+                   (do (println "Pandoc error:" (:err res))
+                       output))))
+    (throw (Exception. (str "Invalid output type: " output-type)))))
+
+;; --- Block Execution ---
+(defn execute-blocks [content compute-id]
+  (println "\n=== Executing Blocks ===")
+  (when compute-id
+    (println "Computing only block with ID:" compute-id))
+
+  (let [cache (atom (load-cache))
+        blocks (find-code-blocks content)]
+
+    ;; Process each block
+    (doseq [block blocks]
+      (println "\nProcessing block" (:id block))
+      (if (= (:id block) compute-id)
+        ;; If this is the block we want to compute, execute it regardless of cache
+        (do
+          (println "Forcing execution of block" (:id block))
+          (let [output (run-python (:code block))
+                processed (process-output output (:output-type block))]
+            (swap! cache assoc (:id block) processed)
+            (println "Updated cache for block" (:id block))))
+        ;; For all other blocks, use cache if available
+        (if-let [cached-output (get @cache (:id block))]
+          (println "Using cached output for block" (:id block))
+          (do
+            ;; Only execute if no cache available
+            (println "No cache found for block" (:id block) ". Executing...")
+            (let [output (run-python (:code block))
+                  processed (process-output output (:output-type block))]
+              (swap! cache assoc (:id block) processed)
+              (println "Cached new output for block" (:id block)))))))
+
+    ;; Replace blocks in content
+    (let [final-content (reduce (fn [content block]
+                                (let [block-output (get @cache (:id block))
+                                      output-tag (str "<<output id=\"" (:id block) "\">><</output>>")]
+                                  (if block-output
+                                    (-> content
+                                        (str/replace (:full-match block)
+                                                   (if (str/includes? content output-tag)
+                                                     "" ; Remove execute block if output tag exists
+                                                     block-output))
+                                        (str/replace output-tag block-output))
+                                    (do
+                                      (println "Warning: No cached output for block" (:id block))
+                                      content))))
+                              content
+                              blocks)]
+      (save-cache @cache)
+      final-content)))
+
+;; --- Frontmatter Processing ---
 (defn parse-frontmatter [content]
+  (println "\n=== Parsing Frontmatter ===")
   (if (str/starts-with? content "---")
     (let [parts (str/split content #"---\s*\n" 3)
           frontmatter (second parts)
@@ -18,79 +181,41 @@
                        (remove str/blank?)
                        (map #(str/split % #":\s+" 2))
                        (into {}))]
+      (println "Found metadata:" metadata)
       {:metadata metadata
        :content body})
-    {:metadata {}
-     :content content}))
+    (do
+      (println "No frontmatter found")
+      {:metadata {}
+       :content content})))
 
-(defn is-html? [s]
-  (or (str/starts-with? (str/trim s) "<")
-      (str/starts-with? (str/trim s) "<!DOCTYPE")))
-
-(defn run-python [code]
-  (let [res (shell/sh "python3" "-c" code)]
-    (if (zero? (:exit res))
-      (let [output (:out res)]
-        (if (is-html? output)
-          output  ; Return HTML directly without wrapping
-          (str "<pre class=\"code-output\">" output "</pre>")))  ; Wrap non-HTML output
-      (do
-        (println "Error running python code:" (:err res))
-        (str "<pre class=\"code-error\">" (:err res) "</pre>")))))
-
-(defn replace-python-blocks [markdown]
-  (let [pattern #"(?s)```([a-zA-Z0-9]+)\n(.*?)```"]
-    (str/replace markdown pattern
-                 (fn [[_ lang code]]
-                   (if (= (str/lower-case lang) "python")
-                     (str (run-python code))
-                     (str "<pre class=\"code-block\"><code class=\"language-" lang "\">" 
-                          (str/escape code 
-                                     {\< "&lt;"
-                                      \> "&gt;"
-                                      \& "&amp;"})
-                          "</code></pre>"))))))
-
-;; Convert markdown to HTML using pandoc
-(defn markdown->html [markdown]
-  (let [res (shell/sh "pandoc"
-                      "--from=markdown+tex_math_dollars+tex_math_single_backslash"
-                      "--to=html"
-                      "--mathjax"
-                      "--wrap=none"
-                      :in markdown)]
-    (if (zero? (:exit res))
-      (:out res)
-      (do (println "Pandoc error:" (:err res))
-          markdown))))
-
-;; Process sidenotes: Convert ^^^ wrapped content to HTML sidenotes
-(defn process-sidenotes [content]
-  (let [sidenote-pattern #"(?s)\^\^\^(.*?)\^\^\^"
-        process-single-sidenote (fn [[_ note-content]]
-                                 (let [processed-content (markdown->html note-content)]
-                                   (format "<div class=\"sidenote\">%s</div>"
-                                         (str/trim processed-content))))]
-    (str/replace content sidenote-pattern process-single-sidenote)))
-
-;; Replace all placeholders in template
 (defn replace-placeholders [template metadata content]
+  (println "\n=== Replacing Placeholders ===")
+  (println "Available metadata keys:" (keys metadata))
   (-> template
       (str/replace "{{TITLE}}" (get metadata "title" ""))
       (str/replace "{{DATE}}" (get metadata "date" ""))
       (str/replace "{{READING_TIME}}" (get metadata "reading_time" ""))
       (str/replace "{{CONTENT}}" content)))
 
-;; MAIN
-(defn -main []
-  (let [raw-md (slurp content-file)
+;; --- Main ---
+(defn -main [& args]
+  (println "\n=== Starting Site Generation ===")
+  (let [compute-id (second (first (filter #(= "--compute" (first %)) (partition 2 args))))
+        _ (println "Reading content file:" content-file)
+        raw-md (slurp content-file)
+        _ (println "Raw content length:" (count raw-md))
         {:keys [metadata content]} (parse-frontmatter raw-md)
-        processed-md-with-sidenotes (process-sidenotes content)
-        processed-md-with-python (replace-python-blocks processed-md-with-sidenotes)
-        content-html (markdown->html processed-md-with-python)
+        _ (println "Content after frontmatter length:" (count content))
+        executed-content (execute-blocks content compute-id)
+        processed-content (-> executed-content
+                            process-sidenotes
+                            markdown->html)
         template (slurp template-file)
-        final-html (replace-placeholders template metadata content-html)]
+        final-html (replace-placeholders template metadata processed-content)]
+    (println "\n=== Writing Output ===")
     (spit output-file final-html)
-    (println (str "Generated " output-file))))
+    (println "Generated" output-file)))
 
-(-main)
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))
