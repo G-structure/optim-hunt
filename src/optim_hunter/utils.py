@@ -20,7 +20,7 @@ def prepare_prompt(x_train, y_train, x_test):
 
     # Create suffix (test case format)
     suffix = [f"{feature}: {{{feature}}}" for feature in x_train.columns]
-    suffix.append(f"{y_train.name}:")
+    suffix.append(f"{y_train.name}: ")
     suffix = "\n".join(suffix)
 
     # Format all examples using the template
@@ -41,14 +41,14 @@ def prepare_prompt(x_train, y_train, x_test):
 def slice_dataset(x_train, y_train, x_test, y_test, n=10):
     """
     Slice the first n items from each dataset while preserving DataFrame structure
-    
+
     Args:
         x_train (pd.DataFrame): Training features
         y_train (pd.Series): Training labels
         x_test (pd.DataFrame): Test features
         y_test (pd.Series): Test labels
         n (int): Number of items to keep
-        
+
     Returns:
         tuple: (x_train_slice, y_train_slice, x_test_slice, y_test_slice)
     """
@@ -56,5 +56,5 @@ def slice_dataset(x_train, y_train, x_test, y_test, n=10):
     y_train_slice = y_train.iloc[:n]
     x_test_slice = x_test.iloc[:n]
     y_test_slice = y_test.iloc[:n]
-    
+
     return x_train_slice, y_train_slice, x_test_slice, y_test_slice
