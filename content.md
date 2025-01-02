@@ -83,7 +83,7 @@ where \(\otimes\) denotes the outer product of token vectors.
 
 2. **Value Aggregation**:
 The attention scores weight how much each token's value contributes to the update:
-```py
+```python
 value_sum = attention_scores @ V
 # Shape: [1, d_model]
 ```
@@ -97,7 +97,7 @@ where \(P\) scales the output and \(W_V\) transforms the attention-weighted sum 
 
 3. **Token Update**:
 Finally, tokens are updated by adding the weighted value sum:
-```py
+```python
 tokens[j] += value_sum
 ```
 The final token update combines the original token with the attention-weighted value sum:
@@ -110,7 +110,7 @@ where the left side represents the updated token \(j\) after one self-attention 
 
 To implement gradient descent, we set up the weight matrices as follows:
 
-```py
+```python
 # Assume tokens are (x_i, y_i) pairs
 W_K = W_Q = torch.block_diag(I_x, 0) # Identity for x features, 0 for y
 W_V = torch.block_diag(0, -I_y)      # -Identity for y features
@@ -129,7 +129,7 @@ where \(\eta\) is the learning rate, \(N\) is the number of tokens, \(W\) is the
 
 This construction results in token updates equivalent to one step of gradient descent with learning rate \(\eta\):
 
-```py
+```python
 # Gradient descent update:
 delta_W = -(eta/N) * sum((W@x_i - y_i) @ x_i.T for i in range(N))
 
@@ -187,6 +187,8 @@ We structured our experiments as follows:
 ^^^
 Couldn't the model just plug the features into the Friedman formula to get y? No - while we know these examples were generated using the Friedman formula, the model only sees raw numbers in the prompt without any formula. It must infer the mathematical relationship between inputs and outputs purely from the three example pairs, making this a genuine test of whether it can learn and apply functions through in-context learning.
 ^^^
+
+<<execute id="1" output="pandoc">>
 ```python
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.utils import slice_dataset, prepare_prompt
@@ -199,6 +201,8 @@ x_train, y_train, x_test, y_test = slice_dataset(
 prompt = prepare_prompt(x_train, y_train, x_test)
 print(prompt)
 ```
+<</execute>>
+
 
 2. **Baseline Models**: We compared Llama 3.1 against a comprehensive suite of traditional regression methods:
    - Linear models (Linear Regression, Ridge, Lasso)
@@ -209,6 +213,7 @@ print(prompt)
 
 3. **Multiple Runs**: To ensure robust results, we evaluated performance across 100 different random sequences of 25 examples each.
 
+<<execute id="2" output="raw">>
 ```python
 from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
 from optim_hunter.sklearn_regressors import (
@@ -229,6 +234,7 @@ regressors = [ linear_regression, ridge, lasso, mlp_universal_approximation_theo
 
 compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
+<</execute>>
 
 ### Mechanistic Interpretability: Opening the Black Box
 
@@ -238,7 +244,7 @@ While demonstrating strong regression performance is interesting, we want to und
 
 The logit difference measures how strongly the model favors one regression method's prediction over another's. In our analysis, we calculate differences between multiple pairs:
 
-```py
+```python
 logit_diff = logits_method_A - logits_method_B
 ```
 
@@ -252,6 +258,7 @@ This helps us understand not just absolute performance, but how the model proces
 
 By examining how these differences evolve through the model's layers, we can understand where and how the model learns to distinguish between different regression strategies.
 
+<<execute id="3" output="raw">>
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
@@ -263,6 +270,7 @@ regressors = [ linear_regression, knn_regression, random_forest, baseline_averag
 
 generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
 ```
+<</execute>>
 
 ### Distribution Analysis: Moving Beyond Logit Differences
 
@@ -272,7 +280,7 @@ The logit diff metric from IOI was designed for a classification-like task (pred
 
 While logit differences give us insight into the model's internal processing, we need different tools to understand how well it's actually performing regression. Let's analyze the statistical properties of its predictions:
 
-```py
+```python
 from optim_hunter.experiments.prediction_distribution import analyze_distribution_batched
 from optim_hunter.sklearn_regressors import (
     linear_regression, knn_regression, random_forest,
@@ -298,14 +306,14 @@ results = analyze_distribution_batched(
 This analysis gives us several key insights into how the model performs regression:
 
 1. **Quality of Fit**: The R² scores tell us how much variance in the target variable our model explains. For the Friedman #2 dataset, we see:
-   ```py
+   ```python
    print(f"R² score: {results['r2_mean']:.3f} ± {results['r2_std']:.3f}")
    # R² score: 0.943 ± 0.015
    ```
    This high R² indicates the model is capturing most of the underlying relationship.
 
 2. **Residual Analysis**: The residuals (differences between predictions and true values) reveal any systematic biases:
-   ```py
+   ```python
    residuals = results['residuals']
    plot_residual_distribution(residuals)
    ```
@@ -315,13 +323,13 @@ This analysis gives us several key insights into how the model performs regressi
    - Some heavy tails, suggesting the model is occasionally "surprised"
 
 3. **Calibration Analysis**: QQ plots compare our residuals to theoretical normal distributions:
-   ```py
+   ```python
    plot_qq(residuals, 'Model Residuals vs Normal Distribution')
    ```
    The close match to the diagonal line suggests well-calibrated uncertainty estimates, though with slightly heavier tails than a normal distribution would predict.
 
 4. **Layer-wise Evolution**: Most interestingly, we can track how predictions evolve through the model's layers:
-   ```py
+   ```python
    layer_metrics = results['layer_metrics']
    plot_metric_evolution(layer_metrics['r2'], 'R² Score by Layer')
    ```
@@ -334,7 +342,7 @@ This pattern of gradual refinement strongly suggests the model is performing som
 
 Let's zoom in on one particularly interesting phenomenon - the correlation between prediction uncertainty and the number of similar examples in the training set:
 
-```py
+```python
 def plot_uncertainty_vs_density(results):
     """Scatter plot of residual magnitude vs local example density"""
     plt.scatter(

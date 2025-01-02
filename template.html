@@ -268,6 +268,117 @@
                 color: #56b6c2;
             }
 
+            .code-output {
+                background: #1e1e1e;
+                color: #d4d4d4;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin: 15px 0;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 0.9em;
+                line-height: 1.5;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                max-width: 100%;
+                border: 1px solid var(--border-color);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            /* Light theme code output */
+            .light-theme .code-output {
+                background: #FDF6E3;
+                color: #333;
+                border: 1px solid var(--border-color-light);
+            }
+
+            /* Code error styling */
+            .code-error {
+                background: #2d2323;
+                color: #ff9494;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin: 15px 0;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 0.9em;
+                line-height: 1.5;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                max-width: 100%;
+                border: 1px solid #ff6b6b;
+                box-shadow: 0 2px 4px rgba(255, 0, 0, 0.1);
+            }
+
+            /* Light theme code error */
+            .light-theme .code-error {
+                background: #fff5f5;
+                color: #dc3545;
+                border: 1px solid #ffcdd2;
+            }
+
+            /* Tables in code output */
+            .code-output table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 10px 0;
+            }
+
+            .code-output th,
+            .code-output td {
+                border: 1px solid var(--border-color);
+                padding: 8px;
+                text-align: left;
+            }
+
+            .light-theme .code-output th,
+            .light-theme .code-output td {
+                border-color: var(--border-color-light);
+            }
+
+            /* Responsive adjustments */
+            @media (max-width: 768px) {
+                .code-output,
+                .code-error {
+                    font-size: 0.85em;
+                    padding: 12px 15px;
+                    margin: 12px 0;
+                }
+
+                .code-output table {
+                    display: block;
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+            }
+
+            /* Optional: Style for specific output types */
+            .code-output img {
+                max-width: 100%;
+                height: auto;
+                margin: 10px 0;
+                border-radius: 4px;
+            }
+
+            .code-output pre {
+                margin: 0;
+                white-space: pre-wrap;
+            }
+
+            /* Optional: Syntax highlighting within output */
+            .code-output .string { color: #ce9178; }
+            .code-output .number { color: #b5cea8; }
+            .code-output .boolean { color: #569cd6; }
+            .code-output .null { color: #569cd6; }
+            .code-output .key { color: #9cdcfe; }
+
+            /* Light theme syntax highlighting */
+            .light-theme .code-output .string { color: #a31515; }
+            .light-theme .code-output .number { color: #098658; }
+            .light-theme .code-output .boolean { color: #0000ff; }
+            .light-theme .code-output .null { color: #0000ff; }
+            .light-theme .code-output .key { color: #0451a5; }
+
             /* Syntax highlighting for light theme (Solarized Light inspired) */
             .light-theme .code-block .keyword {
                 color: #859900;
@@ -346,7 +457,7 @@
                     width: 100%;
                     margin: 10px auto;
                 }
-                
+
                 .plot-container .plotly-graph-div {
                     height: 300px;  /* Smaller height on mobile */
                 }
@@ -390,7 +501,7 @@
                 isDark = !isDark;
                 document.body.classList.toggle("light-theme");
                 toggle.style.transform = `rotate(${isDark ? 0 : 180}deg)`;
-                
+
                 // Dispatch custom event for theme change
                 const event = new Event('themeChanged');
                 document.body.dispatchEvent(event);
@@ -413,7 +524,7 @@
                         }
                     });
                 }, {rootMargin: '100px'});
-            
+
                 // Observe all plots
                 document.querySelectorAll('.plotly-graph-div').forEach(plot => {
                     observer.observe(plot);
