@@ -4,12 +4,12 @@ date: December 2024
 reading_time: 30 minutes
 ---
 
-Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
+Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** and **non-linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
 
 This post attempts to dissect how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. We draw on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], seeking to understand the internal architecture that enables these models to behave like gradient-based learners.
 
 ^^^
-It’s easy to think of LLMs as static function approximators, but the evidence suggests they can "simulate" learning algorithms—like gradient descent—within their forward pass. This emergent capability has profound implications for how we understand, align, and control AI systems.
+~~~It’s easy to think of LLMs as static function approximators, but the evidence suggests they can "simulate" learning algorithms—like gradient descent—within their forward pass. This emergent capability has profound implications for how we understand, align, and control AI systems.~~~
 ^^^
 
 ## Why Focus on Linear Regression?
@@ -191,7 +191,10 @@ Couldn't the model just plug the features into the Friedman formula to get y? No
 <<execute id="1" output="pandoc">>
 ```python
 from optim_hunter.datasets import get_dataset_friedman_2
-from optim_hunter.utils import slice_dataset, prepare_prompt
+from optim_hunter.utils import slice_dataset, prepare_prompt, prepare_prompt_from_tokens, pad_numeric_tokens
+from optim_hunter.llama_model import load_llama_model
+
+llama_model = load_llama_model()
 
 seq_len = 3  # Number of examples to show the model
 x_train, y_train, x_test, y_test = get_dataset_friedman_2()
@@ -199,10 +202,14 @@ x_train, y_train, x_test, y_test = slice_dataset(
     x_train, y_train, x_test, y_test, seq_len
 )
 prompt = prepare_prompt(x_train, y_train, x_test)
-print(prompt)
+
+x_train_tokens, y_train_tokens, x_test_tokens = pad_numeric_tokens(llama_model, x_train, y_train, x_test)
+tokenized_prompt = prepare_prompt_from_tokens(llama_model, x_train_tokens, y_train_tokens, x_test_tokens)
+decoded_prompt = llama_model.to_string(tokenized_prompt[0])
+
+print(decoded_prompt)
 ```
 <</execute>>
-
 
 2. **Baseline Models**: We compared Llama 3.1 against a comprehensive suite of traditional regression methods:
    - Linear models (Linear Regression, Ridge, Lasso)
@@ -224,15 +231,19 @@ from optim_hunter.sklearn_regressors import (
     svm_regression, svm_and_scaler_regression, knn_regression,
     knn_regression_v2, knn_regression_v3, knn_regression_v4,
     knn_regression_v5_adaptable, kernel_ridge_regression,
-    baseline_average, baseline_last, baseline_random
+    baseline_average, baseline_last, baseline_random, create_llm_regressor
 )
 from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+llama_model = load_llama_model()
+model_name = "llama-8b"
 
 seq_len = 25
 batches = 100
-regressors = [ linear_regression, ridge, lasso, mlp_universal_approximation_theorem1, mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3, mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging, gradient_boosting, adaboost, bayesian_regression1, svm_regression, svm_and_scaler_regression, knn_regression, knn_regression_v2, knn_regression_v3, knn_regression_v4, knn_regression_v5_adaptable, kernel_ridge_regression, baseline_average, baseline_last, baseline_random]
+regressors = [ ridge, lasso, mlp_universal_approximation_theorem1, mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3, mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging, gradient_boosting, adaboost, bayesian_regression1, svm_regression, svm_and_scaler_regression, knn_regression, knn_regression_v2, knn_regression_v3, knn_regression_v4, knn_regression_v5_adaptable, kernel_ridge_regression, baseline_average, baseline_last, baseline_random]
 
-compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
+compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=llama_model)
 ```
 <</execute>>
 
@@ -261,17 +272,29 @@ By examining how these differences evolve through the model's layers, we can und
 <<execute id="3" output="raw">>
 ```python
 from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
 from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+model = load_llama_model()
+model_name = "llama-8b"
 
 seq_len = 25
-batches = 5
-regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random ]
+batches = 10
 
-generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches)
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=model)
 ```
 <</execute>>
 
+Average vs llm-llama-8b, and Last vs llm-llama-8b offer the most value here.
+
+We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation. 
+
+~~~
 ### Distribution Analysis: Moving Beyond Logit Differences
 
 ^^^
@@ -289,7 +312,7 @@ from optim_hunter.sklearn_regressors import (
 from optim_hunter.datasets import get_dataset_friedman_2
 
 seq_len = 25  # Number of examples to learn from
-batches = 5   # Number of different random seeds to try
+batches = 1   # Number of different random seeds to try
 regressors = [
     linear_regression, knn_regression, random_forest,
     baseline_average, baseline_last, baseline_random
@@ -306,33 +329,34 @@ results = analyze_distribution_batched(
 This analysis gives us several key insights into how the model performs regression:
 
 1. **Quality of Fit**: The R² scores tell us how much variance in the target variable our model explains. For the Friedman #2 dataset, we see:
-   ```python
-   print(f"R² score: {results['r2_mean']:.3f} ± {results['r2_std']:.3f}")
-   # R² score: 0.943 ± 0.015
-   ```
+```python
+print(f"R² score: {results['r2_mean']:.3f} ± {results['r2_std']:.3f}")
+# R² score: 0.943 ± 0.015
+```
    This high R² indicates the model is capturing most of the underlying relationship.
 
 2. **Residual Analysis**: The residuals (differences between predictions and true values) reveal any systematic biases:
-   ```python
-   residuals = results['residuals']
-   plot_residual_distribution(residuals)
-   ```
+
+```python
+residuals = results['residuals']
+plot_residual_distribution(residuals)
+```
    We observe:
    - Nearly symmetric distribution around zero (no systematic bias)
    - Roughly constant variance across prediction range (homoscedasticity)
    - Some heavy tails, suggesting the model is occasionally "surprised"
 
 3. **Calibration Analysis**: QQ plots compare our residuals to theoretical normal distributions:
-   ```python
-   plot_qq(residuals, 'Model Residuals vs Normal Distribution')
-   ```
+```python
+plot_qq(residuals, 'Model Residuals vs Normal Distribution')
+```
    The close match to the diagonal line suggests well-calibrated uncertainty estimates, though with slightly heavier tails than a normal distribution would predict.
 
 4. **Layer-wise Evolution**: Most interestingly, we can track how predictions evolve through the model's layers:
-   ```python
-   layer_metrics = results['layer_metrics']
-   plot_metric_evolution(layer_metrics['r2'], 'R² Score by Layer')
-   ```
+```python
+layer_metrics = results['layer_metrics']
+plot_metric_evolution(layer_metrics['r2'], 'R² Score by Layer')
+```
    We observe:
    - Initial layers (0-3): Rapid improvement in R²
    - Middle layers (4-8): Gradual refinement
@@ -361,6 +385,7 @@ This statistical analysis complements our earlier logit-based investigation by s
 ^^^
 In practice, we often care more about prediction quality than internal mechanics. However, understanding both gives us confidence that the model is learning robust and generalizable patterns rather than taking shortcuts.
 ^^^
+~~~
 
 ## References
 

@@ -41,7 +41,7 @@ def prepare_prompt(x_train, y_train, x_test):
 
     return final_prompt
 
-def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tokens, prepend_bos=True):
+def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tokens, prepend_bos=True, prepend_inst=True):
     """
     Prepare a prompt tensor from pre-tokenized numeric data.
 
@@ -69,7 +69,8 @@ def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tok
     all_tokens = []
 
     # Add instruction tokens
-    all_tokens.extend(instruction.tolist())
+    if prepend_inst:
+        all_tokens.extend(instruction.tolist())
 
     # Process training examples
     for idx in range(len(x_train_tokens)):
