@@ -25,7 +25,7 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot
+from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot, create_multi_line_plot_layer_names
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
 from typing import List, Tuple
@@ -52,7 +52,7 @@ def generate_logit_diff_plots(dataset, regressors):
     all_plots_html = []
     model = load_llama_model()
     seq_len = 25
-    # TODO we need to be able to run more batches but not over 
+    # TODO we need to be able to run more batches but not over
     batch = 1
     (linreg_tokens, linreg_logits, linreg_cache, linreg_data_store) = run_and_cache_model_linreg_tokens(model, dataset, regressors, seq_len, batch)
     model.clear_contexts()
@@ -186,21 +186,19 @@ def generate_logit_diff_plots(dataset, regressors):
                 include_plotlyjs=(i == 0),  # Only include plotly.js for first plot
                 include_theme_js=(i == len(token_pairs) - 1),  # Include theme JS with last plot
             )
-        
+
         # Generate and collect the plots
         logit_lens_plot_html = create_logit_lens_plot_with_id()
         all_plots_html.append(logit_lens_plot_html)
-            
+
     # Combine all plots
     combined_html = "\n".join(all_plots_html)
-    
+
     # Output combined HTML to stdout
     print(combined_html)
 
-def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
-    model = load_llama_model()
-    all_plots_html = []
-
+def generate_logit_diff_batched(dataset, regressors, seq_len, batches, model):
+    labels = []
     if t.cuda.is_available():
         t.cuda.empty_cache()
 
@@ -251,10 +249,10 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
         ) -> Float[Tensor, "*batch"]:
             # Process each batch separately
             all_logit_diffs = []
-            
+
             for logits in logits_list:
                 final_logits = logits[:, -1, :]  # Take final position from each batch
-                
+
                 correct = answer_tokens[:, 0]
                 incorrect = answer_tokens[:, 1]
 
@@ -263,10 +261,10 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
 
                 logit_diff = correct_logits - incorrect_logits
                 all_logit_diffs.append(logit_diff)
-            
+
             # Combine results
             combined_logit_diffs = t.cat(all_logit_diffs)
-            
+
             if per_prompt:
                 return combined_logit_diffs
             else:
@@ -285,7 +283,7 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
         # Process each cache
         for cache_idx, current_cache in enumerate(linreg_caches):
             logger.info(f"Processing cache {cache_idx}")
-            
+
             # Move cache to GPU
             current_cache = current_cache
 
@@ -322,7 +320,7 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
             token_pair_accumulated_diffs.append(logit_lens_logit_diffs)
 
             # Per layer analysis
-            per_layer_residual, _ = current_cache.decompose_resid(layer=-1, pos_slice=-1, return_labels=True)
+            per_layer_residual, labels = current_cache.decompose_resid(layer=-1, pos_slice=-1, return_labels=True)
             per_layer_logit_diffs = residual_stack_to_logit_diff(per_layer_residual, current_cache)
             token_pair_per_layer_diffs.append(per_layer_logit_diffs)
 
@@ -339,29 +337,44 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
         all_accumulated_diffs.append(avg_accumulated_diffs)
         all_per_layer_diffs.append(avg_per_layer_diffs)
 
+
+    logger.info(f"Size of all_accumulated_diffs: {len(all_accumulated_diffs)}")
+    logger.info(f"Size of token_pairs_names: {len(token_pairs_names)}")
+    # List out all token pairs names
+    logger.info("Token pairs names:")
+    for name in token_pairs_names:
+        logger.info(f"- {name}")
+
+    # Assuming you have a way to get the layer names from your model
+    layer_names = labels  # Replace with the actual method to get layer names
+
     # Create the two multi-line plots
     @with_identifier("accumulated-residual-plot")
     def create_accumulated_residual_plot():
-        return create_multi_line_plot(
+        return create_multi_line_plot_layer_names(
             y_values_list=all_accumulated_diffs,
             labels=token_pairs_names,
             title="Average Logit Difference From Accumulated Residual Stream",
             x_label="Layer",
             y_label="Logit Diff",
+            layer_names=layer_names,  # Pass the layer names here
             include_plotlyjs=True,
-            include_theme_js=False
+            include_theme_js=False,
+            active_lines=[-4]
         )
 
     @with_identifier("per-layer-plot")
     def create_per_layer_plot():
-        return create_multi_line_plot(
+        return create_multi_line_plot_layer_names(
             y_values_list=all_per_layer_diffs,
             labels=token_pairs_names,
             title="Average Per Layer Logit Difference",
             x_label="Layer",
             y_label="Logit Diff",
+            layer_names=layer_names,  # Pass the layer names here
             include_plotlyjs=False,
-            include_theme_js=True
+            include_theme_js=True,
+            active_lines=[-4]
         )
 
     # Generate and output the plots
@@ -399,12 +412,12 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches):
     #     # Generate and collect the plots
     #     logit_lens_plot_html = create_logit_lens_plot_with_id()
     #     per_layer_plot_html = create_per_layer_plot_with_id()
-        
+
     #     all_plots_html.append(logit_lens_plot_html)
     #     all_plots_html.append(per_layer_plot_html)
-    
+
     # # Combine all plots
     # combined_html = "\n".join(all_plots_html)
-    
+
     # # Output combined HTML to stdout
     # print(combined_html)
