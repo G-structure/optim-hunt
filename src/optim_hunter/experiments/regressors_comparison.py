@@ -26,7 +26,7 @@ from optim_hunter.sklearn_regressors import linear_regression, knn_regression, r
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
 from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_bar_plot
-from optim_hunter.llama_model import load_llama_model
+from optim_hunter.llama_model import load_llama_model, load_gpt2_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
 from typing import List, Tuple
 
