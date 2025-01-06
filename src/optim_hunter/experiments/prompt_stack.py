@@ -1,14 +1,11 @@
-from optim_hunter.datasets import get_dataset_friedman_2, get_dataset_friedman_3, get_dataset_friedman_1
-from optim_hunter.utils import slice_dataset, prepare_prompt, prepare_prompt_from_tokens, pad_numeric_tokens
+from optim_hunter.datasets import get_dataset_friedman_2, get_dataset_friedman_3
+from optim_hunter.utils import slice_dataset, prepare_prompt_from_tokens, pad_numeric_tokens
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.sklearn_regressors import (
     linear_regression, ridge, lasso, mlp_universal_approximation_theorem1,
     mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3,
     mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging,
-    gradient_boosting, adaboost, bayesian_regression1,
-    svm_regression, svm_and_scaler_regression, knn_regression,
-    knn_regression_v2, knn_regression_v3, knn_regression_v4,
-    knn_regression_v5_adaptable, kernel_ridge_regression,
+    gradient_boosting, adaboost, svm_regression, svm_and_scaler_regression, kernel_ridge_regression,
     baseline_average, baseline_last, baseline_random
 )
 import torch
@@ -16,8 +13,7 @@ from optim_hunter.plot_html import with_identifier, create_bar_plot, create_mult
 import numpy as np
 
 def model_predict(model, prompt, max_new_tokens=16):
-    """
-    Generate and extract a numeric prediction from a language model.
+    """Generate and extract a numeric prediction from a language model.
 
     Args:
         model: The language model to use for prediction
@@ -31,6 +27,7 @@ def model_predict(model, prompt, max_new_tokens=16):
     2. Extracts just the generated portion (removes prompt)
     3. Finds the first number in the generated text
     4. Converts it to float and returns it
+
     """
     pred_text = model.generate(prompt, max_new_tokens=max_new_tokens, temperature=0)
     # No need to convert to string since generate() returns string directly
@@ -72,8 +69,7 @@ def stacked_compare():
     double_instruct = True # when stacking prompts double up the inst message
 
     def stack_tokenized_prompts(model, tokens_1, tokens_2):
-        """
-        Stack tokenized prompts from two datasets with a separator.
+        """Stack tokenized prompts from two datasets with a separator.
 
         Args:
             model: The LLaMA model instance
@@ -82,6 +78,7 @@ def stacked_compare():
 
         Returns:
             List of stacked tokenized prompts
+
         """
         # Get separator tokens (multiple newlines)
         separator = model.to_tokens('\n\n\n\n\n', prepend_bos=False)[0]

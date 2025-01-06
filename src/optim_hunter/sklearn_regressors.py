@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.svm import SVR
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, BayesianRidge
 from sklearn.neural_network import MLPRegressor
-from sklearn.ensemble import RandomForestRegressor, BaggingRegressor, GradientBoostingRegressor, AdaBoostRegressor, VotingRegressor, StackingRegressor
+from sklearn.ensemble import RandomForestRegressor, BaggingRegressor, GradientBoostingRegressor, AdaBoostRegressor, VotingRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler, SplineTransformer
@@ -13,8 +13,7 @@ from sklearn.kernel_ridge import KernelRidge
 from optim_hunter.utils import prepare_prompt
 
 def create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0):
-    """
-    Factory function that creates an LLM regressor with specified parameters.
+    """Factory function that creates an LLM regressor with specified parameters.
 
     Args:
         model: The language model to use for regression
@@ -24,6 +23,7 @@ def create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0):
 
     Returns:
         A function that implements LLM regression with the specified configuration
+
     """
 
     def llm_regressor(x_train, x_test, y_train, y_test, random_state=1):
@@ -108,8 +108,7 @@ def lasso(x_train, x_test, y_train, y_test, random_state=1):
 # See `Minimum Width for Universal Approximation` (says it's max(input_dim+1, output_dim))
 
 def mlp_universal_approximation_theorem1(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Wide MLP
+    """Wide MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(10, ), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -126,8 +125,7 @@ def mlp_universal_approximation_theorem1(x_train, x_test, y_train, y_test, rando
     }
 
 def mlp_universal_approximation_theorem2(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Wide MLP
+    """Wide MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(100, ), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -145,8 +143,7 @@ def mlp_universal_approximation_theorem2(x_train, x_test, y_train, y_test, rando
 
 
 def mlp_universal_approximation_theorem3(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Wide MLP
+    """Wide MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(1000, ), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -163,8 +160,7 @@ def mlp_universal_approximation_theorem3(x_train, x_test, y_train, y_test, rando
     }
 
 def mlp_deep1(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Deep MLP
+    """Deep MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(10, 10), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -181,8 +177,7 @@ def mlp_deep1(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def mlp_deep2(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Deep MLP
+    """Deep MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(10, 20, 10), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -199,8 +194,7 @@ def mlp_deep2(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def mlp_deep3(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Deep MLP
+    """Deep MLP
     """
     model = MLPRegressor(hidden_layer_sizes=(10, 20, 30, 20, 10), activation='relu', solver='lbfgs', random_state=random_state)
     model.fit(x_train, y_train)
@@ -217,8 +211,7 @@ def mlp_deep3(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def random_forest(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Random Forest Regressor
+    """Random Forest Regressor
     """
     model = RandomForestRegressor(max_depth=3, random_state=random_state)
     model.fit(x_train, y_train)
@@ -235,8 +228,7 @@ def random_forest(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def bagging(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Bagging Regressor
+    """Bagging Regressor
     """
     model = BaggingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
@@ -253,8 +245,7 @@ def bagging(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def gradient_boosting(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Gradient Boosting Regressor
+    """Gradient Boosting Regressor
     """
     model = GradientBoostingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
@@ -272,8 +263,7 @@ def gradient_boosting(x_train, x_test, y_train, y_test, random_state=1):
 
 
 def adaboost(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    AdaBoost Regressor
+    """AdaBoost Regressor
     """
     model = AdaBoostRegressor(n_estimators=100, random_state=random_state)
     model.fit(x_train, y_train)
@@ -291,8 +281,7 @@ def adaboost(x_train, x_test, y_train, y_test, random_state=1):
 
 
 def voting(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    Voting Regressor
+    """Voting Regressor
     """
     model = VotingRegressor()
     model.fit(x_train, y_train)
@@ -440,8 +429,7 @@ def knn_regression_v4(x_train, x_test, y_train, y_test, random_state=1):
     }
 
 def knn_regression_v5_adaptable(x_train, x_test, y_train, y_test, random_state=1):
-    """
-    The idea behind this function is to have a KNN model that adapts to the size of the training set
+    """The idea behind this function is to have a KNN model that adapts to the size of the training set
     Presumably, when you have very little training data, you want to use a small number of neighbors
     As the number of examples increase, a larger numbers of neighbors is fine.
     """
@@ -485,8 +473,7 @@ def knn_regression_generic(x_train, x_test, y_train, y_test, model_name, knn_kwa
     }
 
 def knn_regression_search():
-    """
-    A large number of KNN variants
+    """A large number of KNN variants
     """
     idx = 0
     knn_fns = []
@@ -614,12 +601,13 @@ def baseline_constant(x_train, x_test, y_train, y_test, random_state=1, **kwargs
     }
 
 def linear_regression_manual_gd(x_train, x_test, y_train, y_test, random_state=1, **kwargs):
-    """
-    Linear regression using manual gradient descent steps.
+    """Linear regression using manual gradient descent steps.
 
-    Parameters:
+    Parameters
+    ----------
     - steps: number of gradient descent steps (default: 2)
     - learning_rate: step size for gradient descent (default: 0.01)
+
     """
     steps = kwargs.get('steps', 2)
     learning_rate = kwargs.get('learning_rate', 0.01)
@@ -668,8 +656,7 @@ def create_linear_regression_gd_variants(
     momentum_values=[0.0, 0.5, 0.9],  # 0.0 means no momentum
     lr_schedules=['constant', 'linear_decay', 'exponential_decay']
 ):
-    """
-    Factory function that creates multiple variants of linear regression with gradient descent,
+    """Factory function that creates multiple variants of linear regression with gradient descent,
     each with different hyperparameters.
 
     Args:
@@ -681,6 +668,7 @@ def create_linear_regression_gd_variants(
 
     Returns:
         List of functions, each implementing linear regression with specific hyperparameters
+
     """
     variants = []
 

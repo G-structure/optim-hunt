@@ -2,8 +2,7 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 import torch as t
 
 def create_comparison_data(model, dataset_func, regressors, random_state=1, seq_len=None):
-    """
-    Creates a structured comparison dataset for analyzing different regression models against gold values.
+    """Creates a structured comparison dataset for analyzing different regression models against gold values.
     
     Args:
         model (HookedTransformer): The transformer model used for tokenization
@@ -37,6 +36,7 @@ def create_comparison_data(model, dataset_func, regressors, random_state=1, seq_
         - Only the first token of each prediction is stored in token_pairs
         - All possible combinations between gold and regressors are included
         - Token pairs maintain the order specified in comparison_names
+
     """
     # Get dataset
     x_train, y_train, x_test, y_test = dataset_func(random_state=random_state)

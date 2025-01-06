@@ -3,25 +3,14 @@ from torch import Tensor
 
 import einops
 from jaxtyping import Float
-from transformer_lens.hook_points import HookPoint
 from transformer_lens import (
-    utils,
-    HookedTransformer,
-    HookedTransformerConfig,
-    FactoredMatrix,
     ActivationCache,
 )
-import circuitsvis as cv
 
-from optim_hunter.plotly_utils import imshow, hist, plot_comp_scores, plot_logit_attribution, plot_loss_difference, line
-from optim_hunter.utils import prepare_prompt, slice_dataset
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
-from optim_hunter.datasets import get_dataset_friedman_2
-from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot, create_multi_line_plot_layer_names, create_heatmap_plot
+from optim_hunter.plot_html import create_line_plot, with_identifier, create_multi_line_plot_layer_names, create_heatmap_plot
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
-from typing import List, Tuple
+from typing import List
 
 import logging
 from optim_hunter.logging_config import setup_logging
@@ -80,11 +69,10 @@ def generate_logit_diff_plots(dataset, regressors):
             answer_tokens: Float[Tensor, "batch 2"] = token_pair,
             per_prompt: bool = False
         ) -> Float[Tensor, "*batch"]:
-            '''
-            Returns logit difference between the correct and incorrect answer.
+            """Returns logit difference between the correct and incorrect answer.
 
             If per_prompt=True, return the array of differences rather than the average.
-            '''
+            """
             # Extract token IDs for correct and incorrect answers
             correct = answer_tokens[:, 0]  # Correct token IDs
             incorrect = answer_tokens[:, 1]  # Incorrect token IDs
@@ -127,10 +115,9 @@ def generate_logit_diff_plots(dataset, regressors):
             cache: ActivationCache,
             logit_diff_directions: Float[Tensor, "batch d_model"] = logit_diff_directions,
         ) -> Float[Tensor, "..."]:
-            '''
-            Gets the avg logit difference between the correct and incorrect answer for a given
+            """Gets the avg logit difference between the correct and incorrect answer for a given
             stack of components in the residual stream.
-            '''
+            """
             # Apply LayerNorm scaling (to just the final sequence position)
             scaled_residual_stream = cache.apply_ln_to_stack(residual_stack, layer=-1, pos_slice=-1)
 

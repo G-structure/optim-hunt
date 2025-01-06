@@ -1,30 +1,8 @@
-import sys
 import torch as t
-from torch import Tensor
-import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
-import numpy as np
-import einops
-from jaxtyping import Int, Float
-import functools
-from tqdm import tqdm
-from IPython.display import display
-from transformer_lens.hook_points import HookPoint
 from transformer_lens import (
-    utils,
     HookedTransformer,
-    HookedTransformerConfig,
-    FactoredMatrix,
-    ActivationCache,
 )
-import circuitsvis as cv
 
-from optim_hunter.plotly_utils import imshow, hist, plot_comp_scores, plot_logit_attribution, plot_loss_difference, line
-from optim_hunter.utils import prepare_prompt, slice_dataset
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
-from optim_hunter.datasets import get_dataset_friedman_2
-from optim_hunter.data_model import create_comparison_data
 import logging
 
 # Configure logging
@@ -38,14 +16,13 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 # device = t.device("cpu")
 
 # Load directly from model path https://github.com/TransformerLensOrg/TransformerLens/issues/691
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_TYPE = "meta-llama/Meta-Llama-3-8B-Instruct"
 MODEL_PATH = "/home/freiza/optim_hunter/.models/Llama-3.1-8B-Instruct/"
 
 def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
-    """
-    Load and configure a Llama model using HookedTransformer.
+    """Load and configure a Llama model using HookedTransformer.
 
     Args:
         model_path (str): Path to the model files
@@ -53,6 +30,7 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
 
     Returns:
         HookedTransformer: The configured model instance
+
     """
     if not model_path:
         return None

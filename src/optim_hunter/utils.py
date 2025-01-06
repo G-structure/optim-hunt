@@ -2,8 +2,7 @@ import pandas as pd
 import torch
 
 def prepare_prompt(x_train, y_train, x_test):
-    """
-    Prepare the prompt
+    """Prepare the prompt
     """
     # Format numeric columns to 3 sig figs
     x_train = x_train.round(3)
@@ -42,8 +41,7 @@ def prepare_prompt(x_train, y_train, x_test):
     return final_prompt
 
 def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tokens, prepend_bos=True, prepend_inst=True):
-    """
-    Prepare a prompt tensor from pre-tokenized numeric data.
+    """Prepare a prompt tensor from pre-tokenized numeric data.
 
     Args:
         model: The language model with tokenizer
@@ -54,6 +52,7 @@ def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tok
 
     Returns:
         torch.Tensor: A tensor of tokens representing the complete prompt with shape [1, sequence_length]
+
     """
     # Get tokens for static text elements
     instruction = model.to_tokens(
@@ -131,8 +130,7 @@ def prepare_prompt_from_tokens(model, x_train_tokens, y_train_tokens, x_test_tok
     return prompt_tensor.unsqueeze(0)  # Add batch dimension
 
 def slice_dataset(x_train, y_train, x_test, y_test, n=10):
-    """
-    Slice the first n items from each dataset while preserving DataFrame structure
+    """Slice the first n items from each dataset while preserving DataFrame structure
 
     Args:
         x_train (pd.DataFrame): Training features
@@ -143,6 +141,7 @@ def slice_dataset(x_train, y_train, x_test, y_test, n=10):
 
     Returns:
         tuple: (x_train_slice, y_train_slice, x_test_slice, y_test_slice)
+
     """
     x_train_slice = x_train.iloc[:n]
     y_train_slice = y_train.iloc[:n]
@@ -152,8 +151,7 @@ def slice_dataset(x_train, y_train, x_test, y_test, n=10):
     return x_train_slice, y_train_slice, x_test_slice, y_test_slice
 
 def pad_numeric_tokens(model, x_train, y_train, x_test):
-    """
-    Create new dataframes/lists with tokenized and padded numeric values.
+    """Create new dataframes/lists with tokenized and padded numeric values.
 
     Args:
         model: The language model with tokenizer
@@ -163,6 +161,7 @@ def pad_numeric_tokens(model, x_train, y_train, x_test):
 
     Returns:
         tuple: (x_train_tokens, y_train_tokens, x_test_tokens) matching input type
+
     """
     # Convert to lists if single DataFrame/Series
     is_single = not isinstance(x_train, list)
