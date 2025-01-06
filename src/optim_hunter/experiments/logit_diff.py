@@ -1,15 +1,8 @@
-import sys
 import torch as t
 from torch import Tensor
-import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
-import numpy as np
+
 import einops
-from jaxtyping import Int, Float
-import functools
-from tqdm import tqdm
-from IPython.display import display
+from jaxtyping import Float
 from transformer_lens.hook_points import HookPoint
 from transformer_lens import (
     utils,
@@ -25,7 +18,7 @@ from optim_hunter.utils import prepare_prompt, slice_dataset
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot, create_multi_line_plot_layer_names
+from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot, create_multi_line_plot_layer_names, create_heatmap_plot
 from optim_hunter.llama_model import load_llama_model
 from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
 from typing import List, Tuple
@@ -236,6 +229,7 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches, model):
      # Lists to store accumulated results for all token pairs
     all_accumulated_diffs = []  # Will store logit lens diffs for each token pair
     all_per_layer_diffs = []   # Will store per layer diffs for each token pair
+    all_per_head_diffs = []
 
     # Iterate over token pairs and generate plots
     for i, token_pair in enumerate(token_pairs):
@@ -279,6 +273,8 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches, model):
         # all_per_head_diffs = []
         token_pair_accumulated_diffs = []
         token_pair_per_layer_diffs = []
+        token_pair_per_head_diffs = []
+
 
         # Process each cache
         for cache_idx, current_cache in enumerate(linreg_caches):
@@ -324,18 +320,31 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches, model):
             per_layer_logit_diffs = residual_stack_to_logit_diff(per_layer_residual, current_cache)
             token_pair_per_layer_diffs.append(per_layer_logit_diffs)
 
+            # current_cache = current_cache.to("cpu")
+            per_head_residual, head_labels = current_cache.stack_head_results(layer=-1, pos_slice=-1, return_labels=True)
+            # per_head_residual = per_head_residual.to("cpu")
+            per_head_residual = einops.rearrange(
+                per_head_residual,
+                "(layer head) ... -> layer head ...",
+                layer=model.cfg.n_layers
+            )
+            per_head_logit_diffs = residual_stack_to_logit_diff(per_head_residual, current_cache)
+            token_pair_per_head_diffs.append(per_head_logit_diffs)
+
             # Clear GPU memory
             current_cache = current_cache.to('cpu')
             if t.cuda.is_available():
                 t.cuda.empty_cache()
 
+
         # Average results across all caches
         avg_accumulated_diffs = t.stack(token_pair_accumulated_diffs).mean(dim=0)
         avg_per_layer_diffs = t.stack(token_pair_per_layer_diffs).mean(dim=0)
-        # avg_per_head_diffs = t.stack(all_per_head_diffs).mean(dim=0)
+        avg_per_head_diffs = t.stack(token_pair_per_head_diffs).mean(dim=0)
 
         all_accumulated_diffs.append(avg_accumulated_diffs)
         all_per_layer_diffs.append(avg_per_layer_diffs)
+        all_per_head_diffs.append(avg_per_head_diffs)
 
 
     logger.info(f"Size of all_accumulated_diffs: {len(all_accumulated_diffs)}")
@@ -377,10 +386,26 @@ def generate_logit_diff_batched(dataset, regressors, seq_len, batches, model):
             active_lines=[-4]
         )
 
-    # Generate and output the plots
+    @with_identifier("per-head-heatmap")
+    def create_per_head_heatmap():
+        # Assuming all_per_head_diffs is a list of tensors, stack them to create a 2D array
+        # Each row represents a comparison, each column represents a head
+        per_head_matrix = t.stack(all_per_head_diffs)
+
+        return create_heatmap_plot(
+            z_values=per_head_matrix,
+            title="Per-Head Logit Differences Across Comparisons",
+            x_label="Attention Head",
+            y_label="Comparison",
+            include_plotlyjs=False,
+            include_theme_js=True
+        )
+
+    # Generate and output all plots
     accumulated_plot = create_accumulated_residual_plot()
     per_layer_plot = create_per_layer_plot()
-    print(accumulated_plot + per_layer_plot)
+    per_head_heatmap = create_per_head_heatmap()
+    print(accumulated_plot + per_layer_plot + per_head_heatmap)
 
     #     # Generate plots with unique identifiers for each
     #     @with_identifier(f"logit-lens-plot-{token_pairs_names[i].lower().replace(' ', '-')}")

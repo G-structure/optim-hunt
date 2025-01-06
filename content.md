@@ -4,9 +4,9 @@ date: December 2024
 reading_time: 30 minutes
 ---
 
-Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** and **non-linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
+~~~Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** and **non-linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?~~~
 
-This post attempts to dissect how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. We draw on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], seeking to understand the internal architecture that enables these models to behave like gradient-based learners.
+~~~This post attempts to dissect how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. We draw on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], seeking to understand the internal architecture that enables these models to behave like gradient-based learners.~~~
 
 ^^^
 ~~~It’s easy to think of LLMs as static function approximators, but the evidence suggests they can "simulate" learning algorithms—like gradient descent—within their forward pass. This emergent capability has profound implications for how we understand, align, and control AI systems.~~~
@@ -28,9 +28,11 @@ A standard solution uses gradient descent:
 Linear regression may be the simplest form of in-context "learning" we can probe. If a large model can solve this without explicit supervision, what else can it do via hidden optimization loops?
 ^^^
 
-Recent work shows that transformer models can implement this update rule directly through their self-attention mechanism. To understand how, we first need to examine the building blocks that make this possible...
+~~~Recent work shows that transformer models can implement this update rule directly through their self-attention mechanism. To understand how, we first need to examine the building blocks that make this possible...~~~
 
 ### Self-Attention as a Foundation for Learning
+
+**TODO REWRITE EVERYTHING LOOKS LIKE IT IS HAPPENING MLP**
 
 At the core of Transformers lies the self-attention mechanism, which allows tokens to dynamically interact with and update each other. The standard self-attention operation is given by:
 
@@ -40,9 +42,13 @@ At the core of Transformers lies the self-attention mechanism, which allows toke
 
 where:
 - \( Q = W_Q X \) are queries, projecting input tokens to ask "what should I attend to?"
+
 - \( K = W_K X \) are keys, representing "what information do I contain?"
+
 - \( V = W_V X \) are values, encoding "what information do I provide?"
+
 - \( d_k \) is the dimension of the keys, scaling the dot product
+
 - \( W_Q, W_K, W_V \) are learnable projection matrices
 
 For each token j, this computes a weighted sum over all input tokens i:
@@ -64,6 +70,8 @@ While removing softmax may seem like a major departure from standard transformer
 This linear form makes it easier to see how self-attention can implement mathematical operations like gradient descent. By carefully constructing the weight matrices W_Q, W_K, and W_V, we can make each attention layer perform exactly one step of gradient-based optimization. Let's see how this construction works...
 
 ### Constructing Gradient Descent with Self-Attention
+
+**TODO REWRITE EVERYTHING LOOKS LIKE IT IS HAPPENING MLP**
 
 Von Oswald et al. showed that a single layer of self-attention can implement one step of gradient descent. The key insight is in how attention layers transform token representations through three key operations:
 
@@ -149,8 +157,11 @@ where the equality holds when choosing appropriate weight matrices \(W_K\), \(W_
 ^^^
 The beauty of this construction is that it:
 1. Requires only a single attention layer
+
 2. Works for arbitrary input dimensions
+
 3. Automatically handles batching and parallelization
+
 4. Can be composed to simulate multiple gradient steps
 ^^^
 
@@ -176,7 +187,9 @@ y = (x_1^2 + (x_2 x_3 - \frac{1}{x_2 x_4})^2)^{1/2}
 
 This dataset provides an ideal testbed because:
 1. It has a known ground truth function
+
 2. It combines both linear and non-linear terms
+
 3. It offers a controlled environment with adjustable difficulty
 
 ### Experimental Setup
@@ -213,9 +226,13 @@ print(decoded_prompt)
 
 2. **Baseline Models**: We compared Llama 3.1 against a comprehensive suite of traditional regression methods:
    - Linear models (Linear Regression, Ridge, Lasso)
+
    - Neural networks (MLPs with various architectures)
+
    - Ensemble methods (Random Forest, Gradient Boosting)
+
    - Local methods (k-Nearest Neighbors variants)
+
    - Simple baselines (mean, last value, random)
 
 3. **Multiple Runs**: To ensure robust results, we evaluated performance across 100 different random sequences of 25 examples each.
@@ -261,8 +278,11 @@ logit_diff = logits_method_A - logits_method_B
 
 where:
 - `logits_method_A` are the raw model outputs for one regression method's predictions
+
 - `logits_method_B` are logits for another method's predictions
+
 - The magnitude tells us how much the model distinguishes between the methods
+
 - We can compare both to ground truth and between different regressors
 
 This helps us understand not just absolute performance, but how the model processes and distinguishes between different regression approaches. For example, comparing a simple linear regressor to kNN reveals how the model recognizes the tradeoffs between these methods.
@@ -280,7 +300,7 @@ model = load_llama_model()
 model_name = "llama-8b"
 
 seq_len = 25
-batches = 10
+batches = 1
 
 llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
 
@@ -292,10 +312,46 @@ generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressor
 
 Average vs llm-llama-8b, and Last vs llm-llama-8b offer the most value here.
 
-We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation. 
+We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation.
 
-~~~
-### Distribution Analysis: Moving Beyond Logit Differences
+<<execute id="4" output="raw">>
+```python
+from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
+from optim_hunter.llama_model import load_llama_model
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.experiments.attention import attention
+
+model = load_llama_model()
+seq_len = 25
+num_seeds = 100
+dataset = get_dataset_friedman_2
+output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_info=False)
+html = attention(model, num_seeds, seq_len, dataset)
+print(html)
+```
+<</execute>>
+
+A lot of over lap with induction heads which is expected.
+L27H28, L28H29, L27H30 look interesting
+
+<<execute id="5" output="raw">>
+```python
+from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
+from optim_hunter.llama_model import load_llama_model
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.experiments.mlp import analyze_mlp_for_specific_tokens
+
+model = load_llama_model()
+seq_len = 25
+random_int = 666
+dataset = get_dataset_friedman_2
+tokens = get_tokenized_prompt(model, seq_len, random_int, dataset, print_prompt=False)
+output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_info=False)
+html = analyze_mlp_for_specific_tokens(model, tokens, output_pos, feature_pos, num_last_layers=10)
+print(html)
+```
+<</execute>>
+## Distribution Analysis: Moving Beyond Logit Differences
 
 ^^^
 The logit diff metric from IOI was designed for a classification-like task (predicting one token vs another), while linear regression is fundamentally about predicting continuous values.
@@ -380,12 +436,11 @@ def plot_uncertainty_vs_density(results):
 
 This reveals that the model makes more accurate predictions in regions of the input space where it has seen more similar examples - much like traditional methods such as k-nearest neighbors. However, unlike kNN, it maintains reasonable performance even in sparse regions, suggesting it has learned some general rules about the underlying function.
 
-This statistical analysis complements our earlier logit-based investigation by showing not just how the model processes information internally, but how well it actually learns to perform regression. The results suggest it's doing more than just memorization or simple interpolation - it appears to be learning genuine statistical patterns from the data, much like traditional regression methods.
+This statistical analysis complements our earlier logit-based investigation by showing not just how the model processes information internally, but how well it actually learns to perform regression. The results suggest it's doing more than just memorization or simple interpolation - it appears to be learning genuine statistical patterns from the data, much like traditional regression methods.~~~
 
 ^^^
 In practice, we often care more about prediction quality than internal mechanics. However, understanding both gives us confidence that the model is learning robust and generalizable patterns rather than taking shortcuts.
 ^^^
-~~~
 
 ## References
 

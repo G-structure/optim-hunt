@@ -51,72 +51,79 @@ MAIN = __name__ == "__main__"
 def generate_and_compare_predictions(model, dataset_func, regressors, num_samples=5, seq_len=None):
     """
     Generate model predictions and compare against regression baselines using MSE across multiple prompts
-    
+
     Args:
         model (HookedTransformer): The transformer model
         dataset_func (callable): Function that returns dataset splits
         regressors (list): List of regression functions to compare
         num_samples (int): Number of different prompts to generate and test
         seq_len (int, optional): Length to slice dataset
-        
+
     Returns:
         dict: MSE scores and predictions for each sample
     """
     all_results = []
-    
+
     # Generate multiple samples
     for i in range(num_samples):
         # Get data and predictions using create_comparison_data
         data = create_comparison_data(model, dataset_func, regressors, random_state=i, seq_len=seq_len)
-        
+
         # Get the prompt
         prompt = data['prompt']
-        
-        # Generate model prediction
-        pred_text = model.generate(prompt, max_new_tokens=4, temperature=0)
+
+        # Generate model prediction 4 tokens
+        pred_text = model.generate(prompt, max_new_tokens=16, temperature=0)
         # No need to convert to string since generate() returns string directly
-        
+
         # Extract the numeric prediction from the generated text
         try:
             # Clean the prediction text - remove the prompt and keep only the generated part
             # This assumes the model's output follows the prompt
             generated_part = pred_text.replace(prompt, '').strip()
+            # Find first number with space after it
+            import re
+            pattern = r'[+-]?(?:\d*\.)?\d+'
+            match = re.search(pattern, generated_part)
+            if match:
+                end_pos = match.end()
+                generated_part = generated_part[:end_pos]
             model_pred = float(generated_part)
         except ValueError:
             print(f"Warning: Could not parse model prediction for sample {i}: {pred_text}")
             model_pred = None
-            
+
         # Get gold value and regression predictions
         sample_results = {
             'sample_id': i,
             'predictions': {
-                'llama': model_pred,  # Changed 'model' to 'llama' for clarity
+                'llama 8b 4 tokens': model_pred,
                 'gold': data['predictions']['gold'],
             },
             'mse_scores': {}
         }
-        
+
         # Add predictions from all regressors
         for reg_name, pred_value in data['predictions'].items():
             if reg_name != 'gold':
                 sample_results['predictions'][reg_name] = pred_value
-        
+
         # Calculate MSE scores for all predictions including the model's
         gold = sample_results['predictions']['gold']
         for method, pred in sample_results['predictions'].items():
             if method != 'gold' and pred is not None:
                 sample_results['mse_scores'][method] = (pred - gold) ** 2
-                
+
         all_results.append(sample_results)
-    
+
     # Calculate average MSE across all samples
     avg_mse = {method: [] for method in all_results[0]['mse_scores'].keys()}
     for result in all_results:
         for method, mse in result['mse_scores'].items():
             avg_mse[method].append(mse)
-    
+
     avg_mse = {method: sum(scores)/len(scores) for method, scores in avg_mse.items()}
-    
+
     return {
         'individual_results': all_results,
         'average_mse': avg_mse
@@ -126,18 +133,18 @@ def plot_comparison_results(results):
     import plotly.graph_objects as go
     import plotly.express as px
     from plotly.subplots import make_subplots
-    
+
     # Create figure with secondary y-axis
-    fig = make_subplots(rows=2, cols=1, 
+    fig = make_subplots(rows=2, cols=1,
                        subplot_titles=('Individual Sample Predictions', 'Average MSE Across Samples'),
                        vertical_spacing=0.3)
-    
+
     # Colors for different methods
     methods = list(results['individual_results'][0]['predictions'].keys())
     methods.remove('gold')
     colors = px.colors.qualitative.Set3[:len(methods)]
     color_map = dict(zip(methods, colors))
-    
+
     # Plot individual predictions
     for method in methods:
         x_vals = []
@@ -145,7 +152,7 @@ def plot_comparison_results(results):
         for sample in results['individual_results']:
             x_vals.append(f"Sample {sample['sample_id']}")
             y_vals.append(sample['predictions'][method])
-        
+
         fig.add_trace(
             go.Scatter(
                 name=method,
@@ -156,7 +163,7 @@ def plot_comparison_results(results):
             ),
             row=1, col=1
         )
-        
+
         # Add gold values
         if method == methods[0]:  # Only add gold once
             gold_vals = [sample['predictions']['gold'] for sample in results['individual_results']]
@@ -170,7 +177,7 @@ def plot_comparison_results(results):
                 ),
                 row=1, col=1
             )
-    
+
     # Plot average MSE
     fig.add_trace(
         go.Bar(
@@ -181,7 +188,7 @@ def plot_comparison_results(results):
         ),
         row=2, col=1
     )
-    
+
     # Update layout
     fig.update_layout(
         title='Model vs Regression Methods Comparison Across Multiple Samples',
@@ -195,15 +202,14 @@ def plot_comparison_results(results):
             x=1
         )
     )
-    
+
     # Update y-axes labels
     fig.update_yaxes(title_text="Prediction Value", row=1, col=1)
     fig.update_yaxes(title_text="MSE", row=2, col=1)
-    
+
     return fig
 
-def compare_llm_and_regressors(dataset, regressors, seq_len, batches):
-    model = load_llama_model()
+def compare_llm_and_regressors(dataset, regressors, seq_len, batches, model):
 
     results = generate_and_compare_predictions(
         model=model,
@@ -225,6 +231,6 @@ def compare_llm_and_regressors(dataset, regressors, seq_len, batches):
             include_theme_js=True
         )
     mse_plot = create_mse_plot(results)
-    
+
     # Output the HTML
     print(mse_plot)
