@@ -15,8 +15,9 @@ dependencies = [
     "scikit-learn>=1.6.0",
     "sentencepiece>=0.2.0",
     "bitsandbytes>=0.45.0",
-    "torch"
-    ]
+    "torch==2.2.2",
+    "ipykernel>=6.29.5",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -25,4 +26,16 @@ build-backend = "hatchling.build"
 [tool.uv.sources]
 circuitsvis = { git = "https://github.com/callummcdougall/CircuitsVis.git", subdirectory = "python" }
 neel-plotly = { git = "https://github.com/neelnanda-io/neel-plotly" }
-torch = { path = "./torch-2.2.2+cu121-cp312-cp312-linux_x86_64.whl" }
+
+[tool.ruff]
+# Set the maximum line length to 79.
+line-length = 79
+
+[tool.ruff.lint]
+# Add the `line-too-long` rule to the enforced rule set. By default, Ruff omits rules that
+# overlap with the use of a formatter, like Black, but we can override this behavior by
+# explicitly adding the rule.
+extend-select = [
+    "E501", # line-too-long
+    "D"   # pydocstyle
+]
