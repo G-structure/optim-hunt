@@ -3,7 +3,7 @@ name = "optim-hunter"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "transformer-lens>=2.10.0",
     "einops>=0.8.0",
@@ -14,7 +14,6 @@ dependencies = [
     "plotly>=5.24.1",
     "scikit-learn>=1.6.0",
     "sentencepiece>=0.2.0",
-    "bitsandbytes>=0.45.0",
     "torch==2.2.2",
     "ipykernel>=6.29.5",
 ]

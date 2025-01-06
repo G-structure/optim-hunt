@@ -1,19 +1,54 @@
+"""This module provides utilities for analyzing MLP layer activations
+in transformer models.
+"""  # noqa: D404
+
+from transformer_lens import (
+    HookedTransformer,
+)
+from transformer_lens.hook_points import HookPoint
+
 from optim_hunter.plot_html import create_heatmap_plot
 
-def analyze_mlp_for_specific_tokens(model, input_tokens, output_pos, feature_pos, num_last_layers=10):
-    """Analyze MLP activations specifically for output and feature number tokens
-    with zero values shown in white. Returns HTML string of plots.
+import torch
+
+from typing import Dict, List, Tuple, Callable
+
+def analyze_mlp_for_specific_tokens(
+    model: HookedTransformer,
+    input_tokens: torch.Tensor,
+    output_pos: int,
+    feature_pos: int,
+    num_last_layers: int = 10
+) -> str:
+    """Analyze MLP activations for specific token positions in a transformer model.
+
+    Args:
+        model: The transformer model to analyze
+        input_tokens: Input token tensor
+        output_pos: Position index for output token analysis
+        feature_pos: Position index for feature token analysis
+        num_last_layers: Number of final layers to analyze (default: 10)
+
+    Returns:
+        HTML string containing activation heatmap plots
+
     """
-    mlp_activations = {}
-    plots_html = []
-    
-    def mlp_hook(act, hook, layer_num):
+    mlp_activations: Dict[str, torch.Tensor] = {}
+    plots_html: List[str] = []
+
+    def mlp_hook(
+        act: torch.Tensor,
+        hook: HookPoint,
+        layer_num: int
+    ) -> torch.Tensor:
         if layer_num >= model.cfg.n_layers - num_last_layers:
             mlp_activations[f'layer_{layer_num}'] = act.detach()
         return act
 
     # Create hooks for each layer
-    hooks = []
+    hooks: List[
+        Tuple[str, Callable[[torch.Tensor, HookPoint], torch.Tensor]]
+    ] = []
     for layer_num in range(model.cfg.n_layers):
         hooks.append((
             f'blocks.{layer_num}.hook_mlp_out',
@@ -27,29 +62,34 @@ def analyze_mlp_for_specific_tokens(model, input_tokens, output_pos, feature_pos
         fwd_hooks=hooks
     )
 
-    for layer_num in range(model.cfg.n_layers - num_last_layers, model.cfg.n_layers):
+    for layer_num in range(
+        model.cfg.n_layers - num_last_layers,
+        model.cfg.n_layers
+    ):
         layer_key = f'layer_{layer_num}'
         if layer_key in mlp_activations:
-            acts = mlp_activations[layer_key].squeeze(0)
-            
+            acts: torch.Tensor = mlp_activations[layer_key].squeeze(0)
+
             # Plot output token activations
             output_acts = acts[output_pos, :].cpu().numpy()
             output_plot = create_heatmap_plot(
-                output_acts,
+                output_acts.reshape(1, -1),
                 f"Layer {layer_num} - Output Number Tokens",
-                include_plotlyjs=(layer_num == model.cfg.n_layers - num_last_layers)
+                include_plotlyjs=(
+                    layer_num == model.cfg.n_layers - num_last_layers
+                )
             )
             plots_html.append(output_plot)
-            
+
             # Plot feature token activations
             feature_acts = acts[feature_pos, :].cpu().numpy()
             feature_plot = create_heatmap_plot(
-                feature_acts,
+                feature_acts.reshape(1, -1),
                 f"Layer {layer_num} - Feature Number Tokens",
                 include_theme_js=(layer_num == model.cfg.n_layers - 1)
             )
             plots_html.append(feature_plot)
-            
+
             # Print statistics
             print(f"\nLayer {layer_num} Statistics:")
             print("\nOutput Token Statistics:")
@@ -58,7 +98,7 @@ def analyze_mlp_for_specific_tokens(model, input_tokens, output_pos, feature_pos
             print(f"Max activation: {output_acts.max():.4f}")
             print(f"Min activation: {output_acts.min():.4f}")
             print(f"Sparsity: {(output_acts == 0).mean() * 100:.2f}%")
-            
+
             print("\nFeature Token Statistics:")
             print(f"Mean activation: {feature_acts.mean():.4f}")
             print(f"Std deviation: {feature_acts.std():.4f}")

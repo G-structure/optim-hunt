@@ -1,144 +1,198 @@
-import torch as t
+"""Module for attention visualization and analysis in transformer models.
+
+Contains functions for calculating and visualizing different types of attention scores
+including induction scores, per-example scores, and accumulated attention scores.
+"""
 import functools
+
+import einops
+import torch as t
+from jaxtyping import Float
 from tqdm import tqdm
+from transformer_lens.hook_points import HookPoint
+from transformer_lens import HookedTransformer
+
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
 from optim_hunter.plot_html import create_heatmap_plot
-from jaxtyping import Float
-from transformer_lens.hook_points import HookPoint
-import einops
 
-def attention(model, num_seeds, seq_len, dataset):
-    tokenized_prompt = get_tokenized_prompt(model, seq_len, 1, dataset, print_prompt=False)
-    output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_info=False)
-    
-    induction_score_store = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
-    per_example_score_store = t.zeros((model.cfg.n_layers, model.cfg.n_heads, len(output_pos)), device=model.cfg.device)
-    per_example_accumulated_score_store = t.zeros((model.cfg.n_layers, model.cfg.n_heads, len(output_pos)), device=model.cfg.device)
-    all_examples_score_store = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
-    all_example_accumulated_score_store = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
+from typing import Callable, Tuple
+import pandas as pd
 
-    # Define the number of seeds
-    num_seeds = 100
 
-    output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_info=False)
+def attention(
+    model: HookedTransformer,
+    num_seeds: int,
+    seq_len: int,
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
+) -> str:
+    """Generate attention visualization plots comparing different attention mechanisms.
 
+    Args:
+        model: The transformer model to analyze
+        num_seeds: Number of random seeds to use
+        seq_len: Maximum sequence length
+        dataset: Function that generates the dataset splits
+
+    Returns:
+        str: Combined HTML of all generated plots
+
+    """
+    tokenized_prompt = get_tokenized_prompt(model, seq_len, 1, dataset,
+        print_prompt=False)
+    output_pos, feature_pos = check_token_positions(model, dataset, seq_len,
+        print_info=False)
+
+    # Explicitly type output_pos and feature_pos
+    output_pos: list[int] = output_pos  # type: ignore
+    feature_pos: list[int] = feature_pos  # type: ignore
+
+    cfg = model.cfg
+    device = cfg.device
+    n_layers, n_heads = cfg.n_layers, cfg.n_heads
+
+    # Initialize score tensors
+    induction_score_store = t.zeros((n_layers, n_heads), device=device)
+    per_example_score_store = t.zeros((n_layers, n_heads, len(output_pos)),
+        device=device)
+    per_example_accumulated_score_store = t.zeros((n_layers, n_heads,
+        len(output_pos)), device=device)
+    all_examples_score_store = t.zeros((n_layers, n_heads), device=device)
+    all_example_accumulated_score_store = t.zeros((n_layers, n_heads),
+        device=device)
+
+    output_pos_len = len(output_pos)
 
     # Initialize accumulators for scores
-    induction_score_accumulator = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
-    all_examples_score_accumulator = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
-    all_example_accumulated_score_accumulator = t.zeros((model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device)
-    per_example_score_store_accumulator = t.zeros((model.cfg.n_layers, model.cfg.n_heads, len(output_pos)), device=model.cfg.device)
-    per_example_accumulated_score_store_accumulator = t.zeros((model.cfg.n_layers, model.cfg.n_heads, len(output_pos)), device=model.cfg.device)
-
+    induction_score_accumulator = t.zeros((n_layers, n_heads), device=device)
+    all_examples_score_accumulator = t.zeros((n_layers, n_heads), device=device)
+    all_example_accumulated_score_accumulator = t.zeros((n_layers, n_heads),
+        device=device)
+    per_example_score_store_accumulator = t.zeros((n_layers, n_heads,
+        output_pos_len), device=device)
+    per_example_accumulated_score_store_accumulator = t.zeros((n_layers,
+        n_heads, output_pos_len), device=device)
 
     def induction_score_hook(
         pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
         hook: HookPoint,
-    ):
-        # We take the diagonal of attention paid from each destination position to source positions seq_len-1 tokens back
-        # (This only has entries for tokens with index>=seq_len)
+    ) -> None:
+        # Take diagonal of attention paid from each destination position to
+        # source positions seq_len-1 tokens back
+        # (Only entries for tokens with index>=seq_len)
         induction_stripe = pattern.diagonal(dim1=-2, dim2=-1, offset=1-seq_len)
-        # Get an average score per head
-        induction_score = einops.reduce(induction_stripe, "batch head_index position -> head_index", "mean")
-        # Store the result.
+        # Get average score per head
+        induction_score = einops.reduce(induction_stripe,
+            "batch head_index position -> head_index", "mean")
+        # Store result
         induction_score_store[hook.layer(), :] = induction_score
 
     def accumulated_attention_hook(
         pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
         hook: HookPoint,
-        output_positions,
-        feature_positions
-    ):
-        """Hook to measure accumulated attention from current output positions to all previous output and feature positions.
-        
+        output_positions: list[int],
+        feature_positions: list[int]
+    ) -> None:
+        """Measure accumulated attention between output positions and previous
+        positions.
+
         Args:
-            pattern: Attention pattern tensor with shape [batch, head_index, dest_pos, source_pos]
+            pattern: Attention pattern tensor with shape
+                [batch, head_index, dest_pos, source_pos]
             hook: HookPoint object containing layer information
             output_positions: List of positions of first number after "Output:"
-            feature_positions: List of positions of first numbers after "Features:"
+            feature_positions: List of positions of first numbers after
+                "Features:"
 
         """
-        batch_size = pattern.shape[0]
-        n_heads = pattern.shape[1]
-        scores = []
-        
+        scores: list[t.Tensor] = []
+
         # For each output position
         for i, output_pos in enumerate(output_positions):
             # Get all previous output and feature positions
-            relevant_positions = [pos for pos in output_positions if pos < output_pos] + \
-                                [pos for pos in feature_positions if pos < output_pos]
-            
-            # Get attention scores from current output position to all previous relevant positions
+            relevant_positions = [pos for pos in output_positions
+                if pos < output_pos] + \
+                [pos for pos in feature_positions if pos < output_pos]
+
+            # Get attention scores from current output position
             # Shape: [head_index, 1, source_pos]
-            output_attention = pattern[0, :, output_pos:output_pos+1, :]  # Using first batch element
-            
-            # Calculate mean attention to the relevant positions
+            output_attention = pattern[0, :, output_pos:output_pos+1, :]
+
+            # Calculate mean attention to relevant positions
             # Shape: [head_index]
             if relevant_positions:
-                accumulated_attention = output_attention[:, 0, relevant_positions].mean(dim=-1)
-                per_example_accumulated_score_store[hook.layer(), : , i] = accumulated_attention
+                accumulated_attention = output_attention[:, 0,
+                    relevant_positions].mean(dim=-1)
+                per_example_accumulated_score_store[hook.layer(), : , i] = \
+                    accumulated_attention
                 scores.append(accumulated_attention)
-        
+
         # Average across outputs
         if scores:
             example_score = t.stack(scores).mean(dim=0)
-            # Store the result in the global store
+            # Store result
             all_example_accumulated_score_store[hook.layer(), :] = example_score
 
     def all_example_hook(
         pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
         hook: HookPoint,
-        output_positions,
-        feature_positions
-    ):
-        """Hook to measure attention from output positions to previous feature positions.
-        
+        output_positions: list[int],
+        feature_positions: list[int]
+    ) -> None:
+        """Measure attention from output positions to feature positions.
+
         Args:
-            pattern: Attention pattern tensor with shape [batch, head_index, dest_pos, source_pos]
+            pattern: Attention pattern tensor with shape
+                [batch, head_index, dest_pos, source_pos]
             hook: HookPoint object containing layer information
             output_positions: List of positions of first number after "Output:"
-            feature_positions: List of positions of first numbers after "Features:"
+            feature_positions: List of positions of first numbers after
+                "Features:"
 
         """
-        batch_size = pattern.shape[0]
-        n_heads = pattern.shape[1]
-        scores = []
-        
+        scores: list[t.Tensor] = []
+
         # For each output position
         for i, output_pos in enumerate(output_positions):
             # Get the 3 relevant feature positions that come before this output
-            relevant_feature_pos = [pos for pos in feature_positions if pos < output_pos][-3:]
-            
-            
-            # Get attention scores from output position to feature positions
+            relevant_feature_pos = [pos for pos in feature_positions
+                if pos < output_pos][-3:]
+
+            # Get attention scores from output position
             # Shape: [head_index, 1, source_pos]
-            output_attention = pattern[0, :, output_pos:output_pos+1, :]  # Using first batch element
-            
-            # Calculate mean attention to the relevant feature positions
+            output_attention = pattern[0, :, output_pos:output_pos+1, :]
+
+            # Calculate mean attention to relevant feature positions
             # Shape: [head_index]
-            feature_attention = output_attention[:, 0, relevant_feature_pos].mean(dim=-1)
+            feature_attention = output_attention[:, 0,
+                relevant_feature_pos].mean(dim=-1)
             per_example_score_store[hook.layer(), : , i] = feature_attention
             scores.append(feature_attention)
-        
+
         # Average across outputs
         example_score = t.stack(scores).mean(dim=0)
-        
-        # Store the result in the global store
+
+        # Store result
         all_examples_score_store[hook.layer(), :] = example_score
 
-    # We make a boolean filter on activation names, that's true only on attention pattern names.
-    pattern_hook_names_filter = lambda name: name.endswith("pattern")
+    # Filter for attention pattern names
+    def pattern_hook_names_filter(name: str) -> bool:
+        return str(name).endswith("pattern")
 
     # Loop over seeds
     for seed in tqdm(range(num_seeds), desc="Running seeds"):
-        # Get tokenized prompt for the current seed
-        tokenized_prompt = get_tokenized_prompt(model, seq_len, seed, dataset, print_prompt=False)
-        output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_info=False)
+        # Get tokenized prompt for current seed
+        tokenized_prompt = get_tokenized_prompt(model, seq_len, seed, dataset,
+            print_prompt=False)
+        output_pos, feature_pos = check_token_positions(model, dataset, seq_len,
+            print_info=False)
 
-        # Run the model with hooks
+        # Run model with hooks
         model.run_with_hooks(
-            tokenized_prompt, 
-            return_type=None,  # For efficiency, we don't need to calculate the logits
+            tokenized_prompt,
+            return_type=None,  # For efficiency, don't calculate logits
             fwd_hooks=[
                 (
                     pattern_hook_names_filter,
@@ -148,16 +202,16 @@ def attention(model, num_seeds, seq_len, dataset):
                     pattern_hook_names_filter,
                     functools.partial(
                         all_example_hook,
-                        output_positions=output_pos,  # Use positions for the current seed
-                        feature_positions=feature_pos  # Use positions for the current seed
+                        output_positions=output_pos,
+                        feature_positions=feature_pos
                     )
                 ),
                 (
                     pattern_hook_names_filter,
                     functools.partial(
                         accumulated_attention_hook,
-                        output_positions=output_pos,  # Use positions for the current seed
-                        feature_positions=feature_pos  # Use positions for the current seed
+                        output_positions=output_pos,
+                        feature_positions=feature_pos
                     )
                 )
             ]
@@ -166,23 +220,28 @@ def attention(model, num_seeds, seq_len, dataset):
         # Accumulate scores
         induction_score_accumulator += induction_score_store
         all_examples_score_accumulator += all_examples_score_store
-        all_example_accumulated_score_accumulator += all_example_accumulated_score_store
-        per_example_accumulated_score_store_accumulator += per_example_accumulated_score_store
+        all_example_accumulated_score_accumulator += \
+            all_example_accumulated_score_store
+        per_example_accumulated_score_store_accumulator += \
+            per_example_accumulated_score_store
         per_example_score_store_accumulator += per_example_score_store
 
-    # Average the scores
+    # Average scores
     induction_score_avg = induction_score_accumulator / num_seeds
     all_examples_score_avg = all_examples_score_accumulator / num_seeds
-    all_example_accumulated_score_avg = all_example_accumulated_score_accumulator / num_seeds
-    per_example_accumulated_score_store_avg = per_example_accumulated_score_store_accumulator / num_seeds
-    per_example_score_store_avg = per_example_score_store_accumulator / num_seeds
+    all_example_accumulated_score_avg = \
+        all_example_accumulated_score_accumulator / num_seeds
+    per_example_accumulated_score_store_avg = \
+        per_example_accumulated_score_store_accumulator / num_seeds
+    per_example_score_store_avg = \
+        per_example_score_store_accumulator / num_seeds
 
-       # Create HTML plots
-    html_output = []
-    
-    # Include plotlyjs and theme_js only in the first plot
+    # Create HTML plots
+    html_output: list[str] = []
+
+    # Include plotlyjs and theme_js only in first plot
     html_output.append(create_heatmap_plot(
-        induction_score_avg, 
+        induction_score_avg,
         "Average Induction Score by Head",
         x_label="Head",
         y_label="Layer",
@@ -224,5 +283,5 @@ def attention(model, num_seeds, seq_len, dataset):
 
     # Combine all HTML plots
     combined_html = "\n".join(html_output)
-    
+
     return combined_html
