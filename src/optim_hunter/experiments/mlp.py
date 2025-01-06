@@ -1,8 +1,7 @@
 from optim_hunter.plot_html import create_heatmap_plot
 
 def analyze_mlp_for_specific_tokens(model, input_tokens, output_pos, feature_pos, num_last_layers=10):
-    """
-    Analyze MLP activations specifically for output and feature number tokens
+    """Analyze MLP activations specifically for output and feature number tokens
     with zero values shown in white. Returns HTML string of plots.
     """
     mlp_activations = {}

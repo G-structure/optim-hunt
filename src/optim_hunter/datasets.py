@@ -4,8 +4,7 @@ import pandas as pd
 import numpy as np
 
 def get_dataset_friedman_1(random_state=1):
-    """
-    Generate and return the Friedman #1 dataset.
+    """Generate and return the Friedman #1 dataset.
 
     This function creates a dataset using the `make_friedman1` function from sklearn,
     which is a synthetic dataset used for regression tasks. The dataset is split into
@@ -23,8 +22,8 @@ def get_dataset_friedman_1(random_state=1):
             - y_train (pd.Series): Training labels.
             - x_test (pd.DataFrame): Testing features.
             - y_test (pd.Series): Testing labels.
-    """
 
+    """
     # The data from sklearn
     r_data, r_values = make_friedman1(n_samples=51, noise=0, random_state=random_state)
 
@@ -48,8 +47,7 @@ def get_dataset_friedman_1(random_state=1):
     return x_train, y_train, x_test, y_test
 
 def get_dataset_friedman_2(random_state=1):
-    """
-    Generate and return the Friedman #2 dataset.
+    """Generate and return the Friedman #2 dataset.
 
     This function creates a dataset using the `make_friedman2` function from sklearn,
     which is a synthetic dataset used for regression tasks. The dataset is split into
@@ -67,8 +65,8 @@ def get_dataset_friedman_2(random_state=1):
             - y_train (pd.Series): Training labels.
             - x_test (pd.DataFrame): Testing features.
             - y_test (pd.Series): Testing labels.
-    """
 
+    """
     # The data from sklearn
     r_data, r_values = make_friedman2(n_samples=51, noise=0, random_state=random_state)
 
@@ -93,8 +91,7 @@ def get_dataset_friedman_2(random_state=1):
     return x_train, y_train, x_test, y_test
 
 def get_dataset_friedman_3(random_state=1):
-    """
-    Generate and return the Friedman #3 dataset.
+    """Generate and return the Friedman #3 dataset.
 
     This function creates a dataset using the `make_friedman3` function from sklearn,
     which is a synthetic dataset used for regression tasks. The dataset is split into
@@ -112,8 +109,8 @@ def get_dataset_friedman_3(random_state=1):
             - y_train (pd.Series): Training labels.
             - x_test (pd.DataFrame): Testing features.
             - y_test (pd.Series): Testing labels.
-    """
 
+    """
     # The data from sklearn
     r_data, r_values = make_friedman3(n_samples=51, noise=0, random_state=random_state)
 

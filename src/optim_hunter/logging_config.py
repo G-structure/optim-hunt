@@ -4,12 +4,12 @@ import datetime
 from typing import Optional
 
 def setup_logging(level: Optional[str] = None):
-    """
-    Set up logging configuration with configurable level.
+    """Set up logging configuration with configurable level.
     
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
                If None, defaults to INFO.
+
     """
     # Create logs directory if it doesn't exist
     os.makedirs('logs', exist_ok=True)

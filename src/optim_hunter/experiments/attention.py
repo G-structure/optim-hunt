@@ -1,5 +1,4 @@
 import torch as t
-import numpy as np
 import functools
 from tqdm import tqdm
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
@@ -50,14 +49,14 @@ def attention(model, num_seeds, seq_len, dataset):
         output_positions,
         feature_positions
     ):
-        """
-        Hook to measure accumulated attention from current output positions to all previous output and feature positions.
+        """Hook to measure accumulated attention from current output positions to all previous output and feature positions.
         
         Args:
             pattern: Attention pattern tensor with shape [batch, head_index, dest_pos, source_pos]
             hook: HookPoint object containing layer information
             output_positions: List of positions of first number after "Output:"
             feature_positions: List of positions of first numbers after "Features:"
+
         """
         batch_size = pattern.shape[0]
         n_heads = pattern.shape[1]
@@ -92,14 +91,14 @@ def attention(model, num_seeds, seq_len, dataset):
         output_positions,
         feature_positions
     ):
-        """
-        Hook to measure attention from output positions to previous feature positions.
+        """Hook to measure attention from output positions to previous feature positions.
         
         Args:
             pattern: Attention pattern tensor with shape [batch, head_index, dest_pos, source_pos]
             hook: HookPoint object containing layer information
             output_positions: List of positions of first number after "Output:"
             feature_positions: List of positions of first numbers after "Features:"
+
         """
         batch_size = pattern.shape[0]
         n_heads = pattern.shape[1]

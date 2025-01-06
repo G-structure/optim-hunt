@@ -1,34 +1,7 @@
-import sys
 import torch as t
-from torch import Tensor
-import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
-import numpy as np
-import einops
-from jaxtyping import Int, Float
-import functools
-from tqdm import tqdm
-from IPython.display import display
-from transformer_lens.hook_points import HookPoint
-from transformer_lens import (
-    utils,
-    HookedTransformer,
-    HookedTransformerConfig,
-    FactoredMatrix,
-    ActivationCache,
-)
-import circuitsvis as cv
 
-from optim_hunter.plotly_utils import imshow, hist, plot_comp_scores, plot_logit_attribution, plot_loss_difference, line
-from optim_hunter.utils import prepare_prompt, slice_dataset
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
-from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_bar_plot
-from optim_hunter.llama_model import load_llama_model, load_gpt2_model
-from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
-from typing import List, Tuple
+from optim_hunter.plot_html import with_identifier, create_bar_plot
 
 import logging
 from optim_hunter.logging_config import setup_logging
@@ -49,8 +22,7 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 MAIN = __name__ == "__main__"
 
 def generate_and_compare_predictions(model, dataset_func, regressors, num_samples=5, seq_len=None):
-    """
-    Generate model predictions and compare against regression baselines using MSE across multiple prompts
+    """Generate model predictions and compare against regression baselines using MSE across multiple prompts
 
     Args:
         model (HookedTransformer): The transformer model
@@ -61,6 +33,7 @@ def generate_and_compare_predictions(model, dataset_func, regressors, num_sample
 
     Returns:
         dict: MSE scores and predictions for each sample
+
     """
     all_results = []
 

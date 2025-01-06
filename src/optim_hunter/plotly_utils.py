@@ -14,8 +14,7 @@ from torch import Tensor
 
 
 def to_numpy(tensor):
-    """
-    Helper function to convert a tensor to a numpy array. Also works on lists, tuples, and numpy arrays.
+    """Helper function to convert a tensor to a numpy array. Also works on lists, tuples, and numpy arrays.
     """
     if isinstance(tensor, np.ndarray):
         return tensor
@@ -124,8 +123,7 @@ def imshow(tensor: t.Tensor, renderer=None, **kwargs):
 
 
 def reorder_list_in_plotly_way(L: list, col_wrap: int):
-    """
-    Helper function, because Plotly orders figures in an annoying way when there's column wrap.
+    """Helper function, because Plotly orders figures in an annoying way when there's column wrap.
     """
     L_new = []
     while len(L) > 0:
@@ -135,8 +133,7 @@ def reorder_list_in_plotly_way(L: list, col_wrap: int):
 
 
 def line(y: t.Tensor | list, renderer=None, **kwargs):
-    """
-    Edit to this helper function, allowing it to take args in update_layout (e.g. yaxis_range).
+    """Edit to this helper function, allowing it to take args in update_layout (e.g. yaxis_range).
     """
     kwargs_post = {k: v for k, v in kwargs.items() if k in update_layout_set}
     kwargs_pre = {k: v for k, v in kwargs.items() if k not in update_layout_set}
@@ -361,8 +358,7 @@ def plot_comp_scores(model, comp_scores, title: str = "", baseline: t.Tensor | N
 
 
 def convert_tokens_to_string(model, tokens, batch_index=0):
-    """
-    Helper function to convert tokens into a list of strings, for printing.
+    """Helper function to convert tokens into a list of strings, for printing.
     """
     if len(tokens.shape) == 2:
         tokens = tokens[batch_index]
@@ -562,8 +558,7 @@ def plot_attn_pattern(pattern: Float[Tensor, "batch head_idx seqQ seqK"]):
 def hists_per_comp(
     out_by_component_in_unbalanced_dir: Float[Tensor, "component batch"], data, xaxis_range=(-1, 1)
 ):
-    """
-    Plots the contributions in the unbalanced direction, as supplied by the `out_by_component_in_unbalanced_dir` tensor.
+    """Plots the contributions in the unbalanced direction, as supplied by the `out_by_component_in_unbalanced_dir` tensor.
     """
     titles = {
         (1, 1): "embeddings",

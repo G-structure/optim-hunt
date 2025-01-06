@@ -2,23 +2,18 @@ import torch as t
 from torch import Tensor
 from jaxtyping import Int
 from transformer_lens import (
-    utils,
     HookedTransformer,
-    HookedTransformerConfig,
-    FactoredMatrix,
     ActivationCache,
 )
 
 from optim_hunter.data_model import create_comparison_data
 from optim_hunter.utils import slice_dataset, prepare_prompt_from_tokens, pad_numeric_tokens
-import logging
-from typing import List, Tuple
+from typing import List
 
 device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 def get_numerical_tokens(model):
-    """
-    Extract numerical tokens from a model's vocabulary.
+    """Extract numerical tokens from a model's vocabulary.
     
     This function filters the model's vocabulary to find tokens that represent 
     numerical values (integers or decimals), excluding special characters like 
@@ -35,6 +30,7 @@ def get_numerical_tokens(model):
         >>> numerical_tokens = get_numerical_tokens(model)
         >>> print(numerical_tokens)
         {'0': 1, '1': 2, '1.5': 3, '-2': 4, ...}
+
     """
     # Get the vocabulary
     vocab = model.tokenizer.get_vocab()
@@ -70,8 +66,7 @@ def get_tokenized_prompt(model, seq_len, random_int, dataset, print_prompt=True)
     return tokenized_prompt
 
 def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
-    """
-    Check token positions for a single sequence length and seed.
+    """Check token positions for a single sequence length and seed.
     
     Args:
         model: The transformer model
@@ -81,6 +76,7 @@ def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
     
     Returns:
         tuple: Lists of output and feature positions
+
     """
     # Get tokenized prompt for the specified seed
     tokenized_prompt = get_tokenized_prompt(model, seq_len, seed, dataset, print_prompt=print_info)
@@ -129,8 +125,7 @@ def generate_linreg_tokens(
     batch: int = 1,
     sub_batch = None,
 ) -> Int[Tensor, "batch full_seq_len"]:
-    '''
-    Generates a sequence of linear regression in-context learning tokens for multiple batches.
+    """Generates a sequence of linear regression in-context learning tokens for multiple batches.
 
     Args:
         model (HookedTransformer): The transformer model to use
@@ -145,7 +140,8 @@ def generate_linreg_tokens(
         tuple: A tuple containing:
             - linreg_tokens (Tensor): Tokenized sequences with shape [batch, sequence_length]
             - data_store (list): List of dictionaries containing comparison data for each batch
-    '''
+
+    """
     prefix = (t.ones(batch, 1) * model.tokenizer.bos_token_id).long().to(device)
     zero_token = model.to_tokens('0', truncate=True)[0][-1]
     
@@ -193,8 +189,7 @@ def generate_linreg_tokens(
     return linreg_tokens, data_store
 
 def run_and_cache_model_linreg_tokens(model: HookedTransformer, dataset, regressors, seq_len: int, batch: int = 1) -> tuple[Tensor, Tensor, ActivationCache]:
-    '''
-    Generates a sequence of linear regression in-context learning tokens, runs the model on them, and returns tokens, logits and cache.
+    """Generates a sequence of linear regression in-context learning tokens, runs the model on them, and returns tokens, logits and cache.
 
     Args:
         model (HookedTransformer): The transformer model to run
@@ -209,7 +204,8 @@ def run_and_cache_model_linreg_tokens(model: HookedTransformer, dataset, regress
             - linreg_logits (Tensor): Model logits with shape [batch, 1+seq_len, vocab_size]
             - linreg_cache (ActivationCache): Cache of model activations
             - linreg_data_store (list): List of dictionaries containing comparison data for each batch
-    '''
+
+    """
     linreg_tokens, linreg_data_store = generate_linreg_tokens(model, dataset, regressors, seq_len, batch)
     linreg_logits, linreg_cache = model.run_with_cache(linreg_tokens)
     return linreg_tokens, linreg_logits, linreg_cache, linreg_data_store
@@ -221,8 +217,7 @@ def run_and_cache_model_linreg_tokens_batched(
     seq_len: int, 
     total_batch: int = 1,
 ) -> tuple[List[Tensor], List[Tensor], List[ActivationCache], List]:
-    '''
-    Generates sequences of linear regression in-context learning tokens in smaller batches,
+    """Generates sequences of linear regression in-context learning tokens in smaller batches,
     runs the model, and offloads cache to CPU to manage memory.
 
     Args:
@@ -238,7 +233,8 @@ def run_and_cache_model_linreg_tokens_batched(
             - all_logits (List[Tensor]): List of model logits, each with shape [1, 1+seq_len, vocab_size]
             - all_caches (List[ActivationCache]): List of model activation caches stored on CPU
             - all_data_stores (List): List of dictionaries containing comparison data for each batch
-    '''
+
+    """
     all_tokens = []
     all_logits = []
     all_caches = []

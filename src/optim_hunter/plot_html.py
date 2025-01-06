@@ -36,8 +36,7 @@ THEME_COLORS = {
 }
 
 def get_theme_sync_js():
-    """
-    Returns the JavaScript code for theme synchronization.
+    """Returns the JavaScript code for theme synchronization.
     This should be included once in the page.
     """
     return f"""
@@ -151,8 +150,7 @@ def get_theme_sync_js():
 
 def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
                 hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
-    """
-    Creates a lightweight, themed plot suitable for web embedding.
+    """Creates a lightweight, themed plot suitable for web embedding.
 
     Args:
         y_values: Tensor or list of values to plot
@@ -166,6 +164,7 @@ def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Val
 
     Returns:
         str: HTML/JavaScript code for the plot
+
     """
     # Convert tensor to list if necessary
     if hasattr(y_values, 'tolist'):
@@ -267,8 +266,7 @@ def create_bar_plot(
     include_plotlyjs: bool = False,
     hover_template: str = None
 ) -> str:
-    """
-    Creates a themed bar plot suitable for web embedding.
+    """Creates a themed bar plot suitable for web embedding.
 
     Args:
         x_values: List of x-axis values (categories)
@@ -282,6 +280,7 @@ def create_bar_plot(
 
     Returns:
         str: HTML/JavaScript code for the plot
+
     """
     # Create the trace
     trace = go.Bar(
@@ -362,8 +361,7 @@ def create_bar_plot(
 # Add new function to plot_html.py
 def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_label="Value",
                           hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
-    """
-    Creates a multi-line plot with different colors for each line.
+    """Creates a multi-line plot with different colors for each line.
 
     Args:
         y_values_list: List of lists/tensors containing y-values for each line
@@ -374,6 +372,7 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
         hover_mode: Plotly hover mode
         include_theme_js: Whether to include theme sync JavaScript
         include_plotlyjs: Whether to include Plotly.js library
+
     """
     traces = []
 
@@ -591,8 +590,7 @@ def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_
 
 def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="Token Index", 
                        colorscale=None, zmid=0, include_theme_js=False, include_plotlyjs=False):
-    """
-    Creates a heatmap plot with white at zero.
+    """Creates a heatmap plot with white at zero.
     
     Args:
         z_values: 2D array of values to plot (can be PyTorch tensor or NumPy array)
@@ -603,6 +601,7 @@ def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="To
         zmid: Middle value for color scale
         include_theme_js: Whether to include theme sync JavaScript
         include_plotlyjs: Whether to include Plotly.js library
+
     """
     # Convert PyTorch tensor to NumPy array if necessary
     if hasattr(z_values, 'detach'):
@@ -688,8 +687,7 @@ def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="To
     return plot_html
 
 def with_identifier(identifier):
-    """
-    Decorator to wrap output in a div with an identifier.
+    """Decorator to wrap output in a div with an identifier.
     Can be used with any function that returns HTML content.
 
     Usage:
