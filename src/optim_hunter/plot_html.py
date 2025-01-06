@@ -1,6 +1,12 @@
-import plotly.graph_objects as go
+"""Module for generating plots with plotly and managing plot themes."""
+
 import logging
+from typing import Any, Callable, Union, cast
+
 import numpy as np
+import numpy.typing as npt
+import plotly.graph_objects as go
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -36,121 +42,140 @@ THEME_COLORS = {
 }
 
 def get_theme_sync_js():
-    """Returns the JavaScript code for theme synchronization.
+    """Return the JavaScript code for theme synchronization.
     This should be included once in the page.
     """
     return f"""
-    <script>
-    (function() {{
-        function updatePlotTheme(plotDiv, isLight) {{
-            console.log('Updating plot theme for', plotDiv.id, 'isLight:', isLight);
-            try {{
-                if (isLight) {{
-                    Plotly.relayout(plotDiv, {{
-                        'plot_bgcolor': '{THEME_COLORS["light"]["plot_bgcolor"]}',
-                        'paper_bgcolor': '{THEME_COLORS["light"]["paper_bgcolor"]}',
-                        'xaxis.gridcolor': '{THEME_COLORS["light"]["gridcolor"]}',
-                        'yaxis.gridcolor': '{THEME_COLORS["light"]["gridcolor"]}',
-                        'xaxis.color': '{THEME_COLORS["light"]["text_color"]}',
-                        'yaxis.color': '{THEME_COLORS["light"]["text_color"]}',
-                        'title.font.color': '{THEME_COLORS["light"]["text_color"]}',
-                        'autosize': true
-                    }});
-                    Plotly.restyle(plotDiv, {{
-                        'line.color': '{THEME_COLORS["light"]["bar_color"]}',
-                        'marker.color': '{THEME_COLORS["light"]["bar_color"]}',
-                        'marker.line.color': '{THEME_COLORS["light"]["plot_bgcolor"]}'
-                    }});
-                }} else {{
-                    Plotly.relayout(plotDiv, {{
-                        'plot_bgcolor': '{THEME_COLORS["dark"]["plot_bgcolor"]}',
-                        'paper_bgcolor': '{THEME_COLORS["dark"]["paper_bgcolor"]}',
-                        'xaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
-                        'yaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
-                        'xaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
-                        'yaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
-                        'title.font.color': '{THEME_COLORS["dark"]["text_color"]}',
-                        'autosize': true
-                    }});
-                    Plotly.restyle(plotDiv, {{
-                        'line.color': '{THEME_COLORS["dark"]["bar_color"]}',
-                        'marker.color': '{THEME_COLORS["dark"]["bar_color"]}',
-                        'marker.line.color': '{THEME_COLORS["dark"]["plot_bgcolor"]}'
-                    }});
-                }}
-
-                // Force a resize after theme update
-                window.dispatchEvent(new Event('resize'));
-
-            }} catch (e) {{
-                console.error('Error updating plot theme:', e);
+<script>
+(function() {{
+    function updatePlotTheme(plotDiv, isLight) {{
+        console.log('Updating plot theme for', plotDiv.id, 'isLight:',
+            isLight);
+        try {{
+            if (isLight) {{
+                Plotly.relayout(plotDiv, {{
+                    'plot_bgcolor': '{THEME_COLORS["light"]["plot_bgcolor"]}'
+                    ,
+                    'paper_bgcolor':
+                        '{THEME_COLORS["light"]["paper_bgcolor"]}',
+                    'xaxis.gridcolor':
+                        '{THEME_COLORS["light"]["gridcolor"]}',
+                    'yaxis.gridcolor':
+                        '{THEME_COLORS["light"]["gridcolor"]}',
+                    'xaxis.color': '{THEME_COLORS["light"]["text_color"]}',
+                    'yaxis.color': '{THEME_COLORS["light"]["text_color"]}',
+                    'title.font.color':
+                        '{THEME_COLORS["light"]["text_color"]}',
+                    'autosize': true
+                }});
+                Plotly.restyle(plotDiv, {{
+                    'line.color': '{THEME_COLORS["light"]["bar_color"]}',
+                    'marker.color': '{THEME_COLORS["light"]["bar_color"]}',
+                    'marker.line.color':
+                        '{THEME_COLORS["light"]["plot_bgcolor"]}'
+                }});
+            }} else {{
+                Plotly.relayout(plotDiv, {{
+                    'plot_bgcolor': '{THEME_COLORS["dark"]["plot_bgcolor"]}',
+                    'paper_bgcolor':
+                        '{THEME_COLORS["dark"]["paper_bgcolor"]}',
+                    'xaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
+                    'yaxis.gridcolor': '{THEME_COLORS["dark"]["gridcolor"]}',
+                    'xaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
+                    'yaxis.color': '{THEME_COLORS["dark"]["text_color"]}',
+                    'title.font.color':
+                        '{THEME_COLORS["dark"]["text_color"]}',
+                    'autosize': true
+                }});
+                Plotly.restyle(plotDiv, {{
+                    'line.color': '{THEME_COLORS["dark"]["bar_color"]}',
+                    'marker.color': '{THEME_COLORS["dark"]["bar_color"]}',
+                    'marker.line.color':
+                        '{THEME_COLORS["dark"]["plot_bgcolor"]}'
+                }});
             }}
+
+            // Force a resize after theme update
+            window.dispatchEvent(new Event('resize'));
+
+        }} catch (e) {{
+            console.error('Error updating plot theme:', e);
+        }}
+    }}
+
+    // In template.html, modify the theme change handler
+    function updateAllPlots() {{
+        // Debounce the update
+        if (window.plotUpdateTimeout) {{
+            clearTimeout(window.plotUpdateTimeout);
         }}
 
-        // In template.html, modify the theme change handler
-        function updateAllPlots() {{
-            // Debounce the update
-            if (window.plotUpdateTimeout) {{
-                clearTimeout(window.plotUpdateTimeout);
+        window.plotUpdateTimeout = setTimeout(() => {{
+            const isLight = document.body.classList.contains('light-theme');
+            const plots = document.querySelectorAll('.plotly-graph-div');
+
+            // Update plots in batches
+            const batchSize = 3;
+            for (let i = 0; i < plots.length; i += batchSize) {{
+                setTimeout(() => {{
+                    const batch = Array.from(plots).slice(i, i + batchSize);
+                    batch.forEach(plot => updatePlotTheme(plot, isLight));
+                }}, Math.floor(i/batchSize) * 100);
             }}
+        }}, 250);
+    }}
 
-            window.plotUpdateTimeout = setTimeout(() => {{
-                const isLight = document.body.classList.contains('light-theme');
-                const plots = document.querySelectorAll('.plotly-graph-div');
-
-                // Update plots in batches
-                const batchSize = 3;
-                for (let i = 0; i < plots.length; i += batchSize) {{
-                    setTimeout(() => {{
-                        const batch = Array.from(plots).slice(i, i + batchSize);
-                        batch.forEach(plot => updatePlotTheme(plot, isLight));
-                    }}, Math.floor(i/batchSize) * 100);
-                }}
-            }}, 250);
+    // Add resize handler with debouncing
+    window.addEventListener('resize', function() {{
+        if (window.resizeTimeout) {{
+            clearTimeout(window.resizeTimeout);
         }}
-
-        // Add resize handler with debouncing
-        window.addEventListener('resize', function() {{
-            if (window.resizeTimeout) {{
-                clearTimeout(window.resizeTimeout);
-            }}
-            window.resizeTimeout = setTimeout(function() {{
-                document.querySelectorAll('.plotly-graph-div').forEach(function(plot) {{
+        window.resizeTimeout = setTimeout(function() {{
+            document.querySelectorAll('.plotly-graph-div')
+                .forEach(function(plot) {{
                     Plotly.Plots.resize(plot);
                 }});
-            }}, 250);
-        }});
+        }}, 250);
+    }});
 
-        // Wait for Plotly to be fully loaded
-        function ensurePlotly() {{
-            if (window.Plotly) {{
-                console.log('Plotly loaded, setting up theme handling');
-                // Initial theme setup
+    // Wait for Plotly to be fully loaded
+    function ensurePlotly() {{
+        if (window.Plotly) {{
+            console.log('Plotly loaded, setting up theme handling');
+            // Initial theme setup
+            updateAllPlots();
+
+            // Listen for theme changes
+            document.body.addEventListener('themeChanged', function(e) {{
+                console.log('Theme changed event received');
                 updateAllPlots();
+            }});
 
-                // Listen for theme changes
-                document.body.addEventListener('themeChanged', function(e) {{
-                    console.log('Theme changed event received');
-                    updateAllPlots();
-                }});
-
-                // Initial resize to ensure proper dimensions
-                window.dispatchEvent(new Event('resize'));
-            }} else {{
-                console.log('Waiting for Plotly...');
-                setTimeout(ensurePlotly, 100);
-            }}
+            // Initial resize to ensure proper dimensions
+            window.dispatchEvent(new Event('resize'));
+        }} else {{
+            console.log('Waiting for Plotly...');
+            setTimeout(ensurePlotly, 100);
         }}
+    }}
 
-        // Start checking for Plotly
-        ensurePlotly();
-    }})();
-    </script>
+    // Start checking for Plotly
+    ensurePlotly();
+}})();
+</script>
     """
 
-def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Value",
-                hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
-    """Creates a lightweight, themed plot suitable for web embedding.
+def create_line_plot(
+    y_values: Union[list[float], torch.Tensor],
+    title: str,
+    labels: list[str] | None = None,
+    x_label: str = "Layer",
+    y_label: str = "Value",
+    hover_mode: str = "x unified",
+    include_theme_js: bool = False,
+    include_plotlyjs: bool = False
+) -> str:
+    """Create a lightweight, themed plot suitable for web embedding.
 
     Args:
         y_values: Tensor or list of values to plot
@@ -159,16 +184,20 @@ def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Val
         x_label: Label for x-axis (default: "Layer")
         y_label: Label for y-axis (default: "Value")
         hover_mode: Plotly hover mode (default: "x unified")
-        include_theme_js: Whether to include the theme sync JavaScript (should only be True once)
-        include_plotlyjs: Whether to include the Plotly.js library (should only be True once)
+        include_theme_js: Whether to include the theme sync JavaScript
+            (should only be True once)
+        include_plotlyjs: Whether to include the Plotly.js library
+            (should only be True once)
 
     Returns:
         str: HTML/JavaScript code for the plot
 
     """
     # Convert tensor to list if necessary
-    if hasattr(y_values, 'tolist'):
-        y_values = y_values.tolist()
+    if isinstance(y_values, torch.Tensor):
+        y_values = cast(list[float], y_values.tolist())
+    else:
+        y_values = y_values
 
     # Create the trace
     trace = go.Scatter(
@@ -187,7 +216,9 @@ def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Val
                 width=1
             )
         ),
-        hovertemplate=f'{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+        hovertemplate=(
+            f'{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+        )
     )
 
     # Create the layout
@@ -257,16 +288,16 @@ def create_line_plot(y_values, title, labels=None, x_label="Layer", y_label="Val
     return plot_html
 
 def create_bar_plot(
-    x_values: list,
-    y_values: list,
+    x_values: list[Union[str, float]],
+    y_values: list[float],
     title: str,
     x_label: str = "",
     y_label: str = "",
     include_theme_js: bool = False,
     include_plotlyjs: bool = False,
-    hover_template: str = None
+    hover_template: str | None = None
 ) -> str:
-    """Creates a themed bar plot suitable for web embedding.
+    """Create a themed bar plot suitable for web embedding.
 
     Args:
         x_values: List of x-axis values (categories)
@@ -293,7 +324,9 @@ def create_bar_plot(
                 width=1
             )
         ),
-        hovertemplate=hover_template if hover_template else f"{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>"
+        hovertemplate=(hover_template if hover_template
+                      else f"{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}"
+                           f"<extra></extra>")
     )
 
     # Create the layout
@@ -358,10 +391,17 @@ def create_bar_plot(
 
     return plot_html
 
-# Add new function to plot_html.py
-def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_label="Value",
-                          hover_mode="x unified", include_theme_js=False, include_plotlyjs=False):
-    """Creates a multi-line plot with different colors for each line.
+def create_multi_line_plot(
+    y_values_list: list[list[float]],
+    labels: list[str],
+    title: str,
+    x_label: str = "Layer",
+    y_label: str = "Value",
+    hover_mode: str = "x unified",
+    include_theme_js: bool = False,
+    include_plotlyjs: bool = False
+) -> str:
+    """Create a multi-line plot with different colors for each line.
 
     Args:
         y_values_list: List of lists/tensors containing y-values for each line
@@ -373,6 +413,9 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
         include_theme_js: Whether to include theme sync JavaScript
         include_plotlyjs: Whether to include Plotly.js library
 
+    Returns:
+        str: HTML string containing the plot
+
     """
     traces = []
 
@@ -381,9 +424,10 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
 
     # Calculate number of legend rows needed (assuming ~3 items per row)
     num_legend_rows = (len(labels) + 2) // 3  # Add 2 for rounding up
-    bottom_margin = max(100, 50 + (num_legend_rows * 20))  # Base 50px + 20px per row
+    bottom_margin = max(100, 50 + (num_legend_rows * 20))  # 50px + 20px per row
 
-    for i, (y_values, label) in enumerate(zip(y_values_list, labels)):
+    for i, (y_values, label) in enumerate(zip(y_values_list,
+                                          labels, strict=True)):
         # Use modulo to cycle through colors
         color_index = i % num_colors
 
@@ -404,7 +448,10 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
                     width=1
                 )
             ),
-            hovertemplate=f'{label}<br>{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+            hovertemplate=(
+                f'{label}<br>{x_label}: %{{x}}<br>'
+                f'{y_label}: %{{y:.3f}}<extra></extra>'
+            )
         )
         traces.append(trace)
 
@@ -475,22 +522,56 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
 
     return plot_html
 
-def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_label, layer_names, hover_mode='x unified', include_plotlyjs=True, include_theme_js=True, active_lines = None):
+def create_multi_line_plot_layer_names(
+    y_values_list: list[list[float]],
+    labels: list[str],
+    title: str,
+    x_label: str,
+    y_label: str,
+    layer_names: list[str],
+    hover_mode: str = 'x unified',
+    include_plotlyjs: bool = True,
+    include_theme_js: bool = True,
+    active_lines: list[int] | None = None
+) -> str:
+    """Create a multi-line plot with custom layer names on x-axis.
+
+    Args:
+        y_values_list: List of lists containing y-values for each line
+        labels: List of labels for each line
+        title: Plot title
+        x_label: Label for x-axis
+        y_label: Label for y-axis
+        layer_names: List of names for x-axis ticks
+        hover_mode: Plotly hover mode. Defaults to 'x unified'
+        include_plotlyjs: Whether to include Plotly.js library
+        include_theme_js: Whether to include theme sync JavaScript
+        active_lines: List of line indices to show by default. Defaults to None.
+
+    Returns:
+        str: HTML string containing the plot
+
+    """
     traces = []
-    
-    # Get the number of colors available 
+
+    # Get the number of colors available
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
     # Calculate number of legend rows needed (assuming ~2 items per row)
     num_legend_rows = (len(labels) + 2) // 2  # Add 2 for rounding up
-    bottom_margin = max(250, 75 + (num_legend_rows * 50))  # Base 50px + 20px per row
+    # Base 50px + 20px per row
+    bottom_margin = max(250, 75 + (num_legend_rows * 50))
 
-    for i, (y_values, label) in enumerate(zip(y_values_list, labels)):
+    for i, (y_values, label) in enumerate(zip(y_values_list,
+                                          labels, strict=True)):
         # Use modulo to cycle through colors
         color_index = i % num_colors
-        
+
         # Determine if line is visable
-        is_visible = True if active_lines and (i in active_lines or i == len(y_values_list) + active_lines[0]) else "legendonly"
+        is_visible = (True if active_lines and
+                     (i in active_lines or
+                      i == len(y_values_list) + active_lines[0])
+                     else "legendonly")
 
         trace = go.Scatter(
             x=layer_names,
@@ -499,21 +580,19 @@ def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_
             mode='lines+markers',
             line=dict(
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
-                # width=4 if is_highlighted else 1,  # Thicker line for highlighted trace
-                width = 4
+                width=4
             ),
             marker=dict(
-                # size=8 if is_highlighted else 4,  # Larger markers for highlighted trace
-                size = 8,
+                size=8,
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
                 line=dict(
                     color=THEME_COLORS['dark']['plot_bgcolor'],
                     width=1
                 )
             ),
-            # opacity=1.0 if is_highlighted else 0.3,  # Dim non-highlighted traces
-            opacity = 1.0,
-            hovertemplate=f'{label}<br>{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>',
+            opacity=1.0,
+            hovertemplate=(f'{label}<br>{x_label}: %{{x}}<br>'
+                          f'{y_label}: %{{y:.3f}}<extra></extra>'),
             visible=is_visible
         )
         traces.append(trace)
@@ -588,12 +667,20 @@ def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_
 
     return plot_html
 
-def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="Token Index", 
-                       colorscale=None, zmid=0, include_theme_js=False, include_plotlyjs=False):
-    """Creates a heatmap plot with white at zero.
-    
+def create_heatmap_plot(
+    z_values: Union[torch.Tensor, npt.NDArray[np.float64]],
+    title: str,
+    x_label: str = "Hidden Dimension",
+    y_label: str = "Token Index",
+    colorscale: list[list[float | str]] | None = None,
+    zmid: float = 0,
+    include_theme_js: bool = False,
+    include_plotlyjs: bool = False
+) -> str:
+    """Create a heatmap plot with white at zero.
+
     Args:
-        z_values: 2D array of values to plot (can be PyTorch tensor or NumPy array)
+        z_values: 2D array of values to plot (PyTorch tensor or NumPy array)
         title: Plot title
         x_label: Label for x-axis
         y_label: Label for y-axis
@@ -602,22 +689,30 @@ def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="To
         include_theme_js: Whether to include theme sync JavaScript
         include_plotlyjs: Whether to include Plotly.js library
 
+    Returns:
+        str: HTML string containing the plot
+
     """
     # Convert PyTorch tensor to NumPy array if necessary
-    if hasattr(z_values, 'detach'):
-        z_values = z_values.detach().cpu().numpy()
+    if isinstance(z_values, torch.Tensor):
+        z_values = cast(npt.NDArray[np.float64], z_values.detach()
+                                                         .cpu()
+                                                         .numpy())
     elif hasattr(z_values, 'numpy'):
-        z_values = z_values.numpy()
-    
+        z_values = np.array(z_values, dtype=np.float64)
+
     if colorscale is None:
         colorscale = [
-            [0, THEME_COLORS['dark']['multi_line_colors'][0]],  # Blue for negative
+            [0, THEME_COLORS['dark']['multi_line_colors'][0]],
             [0.5, 'white'],  # White at zero
-            [1, THEME_COLORS['dark']['multi_line_colors'][1]]   # Red for positive
+            [1, THEME_COLORS['dark']['multi_line_colors'][1]]
         ]
 
     # Get max absolute value for symmetric color scale
-    max_abs_val = float(max(abs(np.min(z_values)), abs(np.max(z_values))))
+    max_abs_val = float(max(
+        abs(np.min(z_values)),
+        abs(np.max(z_values))
+    ))
 
     trace = go.Heatmap(
         z=z_values,
@@ -686,19 +781,30 @@ def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="To
 
     return plot_html
 
-def with_identifier(identifier):
-    """Decorator to wrap output in a div with an identifier.
+def with_identifier(identifier: str) -> Callable[..., Callable[..., str]]:
+    """Wrap output in a div with an identifier.
+
     Can be used with any function that returns HTML content.
 
+    Args:
+        identifier: String identifier for the div
+
     Usage:
-    @with_identifier("my-plot-1")
-    def create_plot(...):
-        ...
+        @with_identifier("my-plot-1")
+        def create_plot(...):
+            ...
+
+    Returns:
+        Decorated function that wraps HTML output in identified div
+
     """
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    def decorator(func: Callable[..., str]) -> Callable[..., str]:
+        def wrapper(*args: Any, **kwargs: Any) -> str:
             logger.info(f"Creating plot with identifier: {identifier}")
-            output = func(*args, **kwargs)
-            return f'<div id="{identifier}" class="identified-content">{output}</div>'
+            output: str = func(*args, **kwargs)
+            return (
+                f'<div id="{identifier}" class="identified-content">'
+                f'{output}</div>'
+            )
         return wrapper
     return decorator

@@ -1,19 +1,26 @@
-import torch as t
-from torch import Tensor
+import logging
+from typing import List
 
 import einops
+import torch as t
 from jaxtyping import Float
+from torch import Tensor
 from transformer_lens import (
     ActivationCache,
 )
 
-from optim_hunter.plot_html import create_line_plot, with_identifier, create_multi_line_plot_layer_names, create_heatmap_plot
 from optim_hunter.llama_model import load_llama_model
-from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
-from typing import List
-
-import logging
 from optim_hunter.logging_config import setup_logging
+from optim_hunter.model_utils import (
+    run_and_cache_model_linreg_tokens,
+    run_and_cache_model_linreg_tokens_batched,
+)
+from optim_hunter.plot_html import (
+    create_heatmap_plot,
+    create_line_plot,
+    create_multi_line_plot_layer_names,
+    with_identifier,
+)
 
 # Set up logging
 setup_logging("DEBUG")

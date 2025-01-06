@@ -1,14 +1,16 @@
+"""Utilities for loading and configuring LLM models."""
+import logging
+from typing import Any, Optional
+
 import torch as t
 from transformer_lens import (
     HookedTransformer,
 )
-
-import logging
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Saves computation time, since we don't need it for the contents of this notebook
 t.set_grad_enabled(False)
 
 #device = t.device("cuda:0,1" if t.cuda.is_available() else "cpu")
@@ -16,12 +18,13 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 # device = t.device("cpu")
 
 # Load directly from model path https://github.com/TransformerLensOrg/TransformerLens/issues/691
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 MODEL_TYPE = "meta-llama/Meta-Llama-3-8B-Instruct"
 MODEL_PATH = "/home/freiza/optim_hunter/.models/Llama-3.1-8B-Instruct/"
 
-def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
+def load_llama_model(
+    model_path: str = MODEL_PATH,
+    model_type: str = MODEL_TYPE
+) -> Optional[HookedTransformer]:
     """Load and configure a Llama model using HookedTransformer.
 
     Args:
@@ -35,12 +38,14 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
     if not model_path:
         return None
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    hf_model = AutoModelForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True,
-                                                 #quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-                                                 #torch_dtype = t.float32,
-                                                 #device_map = "cuda:0"
-                                                 )
+    tokenizer: Any = AutoTokenizer.from_pretrained(model_path)
+    hf_model: Any = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        low_cpu_mem_usage=True,
+        #quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        #torch_dtype = t.float32,
+        #device_map = "cuda:0"
+    )
 
     tokenizer.padding_side = 'left'
     tokenizer.pad_token = tokenizer.eos_token
@@ -55,7 +60,7 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
         # refactor_factored_attn_matrices=True,
         center_unembed=True,
         # dtype=t.bfloat16,
-        dtype=t.float16,
+        dtype="float16",
         default_padding_side='left',
         tokenizer=tokenizer,
         verbose=False
@@ -63,7 +68,13 @@ def load_llama_model(model_path=MODEL_PATH, model_type=MODEL_TYPE):
 
     return model
 
-def load_gpt2_model():
+def load_gpt2_model() -> HookedTransformer:
+    """Load and configure a GPT-2 small model using HookedTransformer.
+
+    Returns:
+        HookedTransformer: The configured GPT-2 model instance
+
+    """
     model = HookedTransformer.from_pretrained(
         "gpt2-small",
         center_unembed=True,
