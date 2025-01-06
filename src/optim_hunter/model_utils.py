@@ -10,6 +10,7 @@ from transformer_lens import (
 )
 
 from optim_hunter.data_model import create_comparison_data
+from optim_hunter.utils import slice_dataset, prepare_prompt_from_tokens, pad_numeric_tokens
 import logging
 from typing import List, Tuple
 
@@ -51,6 +52,74 @@ def get_numerical_tokens(model):
             numerical_tokens[token] = id
     
     return numerical_tokens
+
+def get_tokenized_prompt(model, seq_len, random_int, dataset, print_prompt=True):
+    x_train, y_train, x_test, y_test = dataset(random_int)
+    x_train, y_train, x_test, y_test = slice_dataset(
+        x_train, y_train, x_test, y_test, seq_len
+    )
+    x_train_tokens, y_train_tokens, x_test_tokens = pad_numeric_tokens(
+                    model, x_train, y_train, x_test
+                )
+    tokenized_prompt = prepare_prompt_from_tokens(
+        model, x_train_tokens, y_train_tokens, x_test_tokens, prepend_bos=True, prepend_inst=True
+    )
+
+    prompt = model.to_string(tokenized_prompt[0])
+    if print_prompt: print(prompt)
+    return tokenized_prompt
+
+def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
+    """
+    Check token positions for a single sequence length and seed.
+    
+    Args:
+        model: The transformer model
+        dataset: The dataset being used
+        seq_len: Sequence length to test
+        seed: Random seed (default: 0)
+    
+    Returns:
+        tuple: Lists of output and feature positions
+    """
+    # Get tokenized prompt for the specified seed
+    tokenized_prompt = get_tokenized_prompt(model, seq_len, seed, dataset, print_prompt=print_info)
+    input_tokens = tokenized_prompt.to(model.cfg.device)
+    
+    # Get string tokens for the full sequence
+    str_tokens = model.to_str_tokens(input_tokens[0])
+    
+    # Find indices where "Output:" and "Features:" appear
+    output_indices = [i for i, token in enumerate(str_tokens[24:], start=24) if token == "Output"]
+    feature_indices = [i for i, token in enumerate(str_tokens[24:], start=24) if token == "Feature"]
+    
+    # Get positions of first number token after each marker
+    output_positions = []
+    for idx in output_indices:
+        current_pos = idx + 3  # Skip "Output: "
+        if current_pos < len(str_tokens) - 1:
+            output_positions.append(current_pos)
+    
+    feature_positions = []
+    for idx in feature_indices:
+        current_pos = idx + 5  # Skip "Features n: "
+        if current_pos < len(str_tokens) - 1:
+            feature_positions.append(current_pos)
+    
+    # Print results
+    if print_info:
+        print("\nPositions of first number token after 'Output:':")
+        print(f"Positions: {output_positions}")
+        
+        print("\nPositions of first number token after 'Feature:':")
+        print(f"Positions: {feature_positions}")
+        
+        # Print example tokens at these positions
+        print("\nExample tokens at these positions:")
+        print("After Output:", [str_tokens[pos] for pos in output_positions])
+        print("After Features:", [str_tokens[pos] for pos in feature_positions])
+    
+    return output_positions, feature_positions
 
 def generate_linreg_tokens(
     model: HookedTransformer,
@@ -199,3 +268,5 @@ def run_and_cache_model_linreg_tokens_batched(
             t.cuda.empty_cache()
 
     return all_tokens, all_logits, all_caches, all_data_stores
+
+    

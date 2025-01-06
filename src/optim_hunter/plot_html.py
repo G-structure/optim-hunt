@@ -1,5 +1,6 @@
 import plotly.graph_objects as go
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +380,10 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
     # Get the number of colors available
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
+    # Calculate number of legend rows needed (assuming ~3 items per row)
+    num_legend_rows = (len(labels) + 2) // 3  # Add 2 for rounding up
+    bottom_margin = max(100, 50 + (num_legend_rows * 20))  # Base 50px + 20px per row
+
     for i, (y_values, label) in enumerate(zip(y_values_list, labels)):
         # Use modulo to cycle through colors
         color_index = i % num_colors
@@ -407,7 +412,7 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
     layout = go.Layout(
         plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
         paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
-        margin=dict(l=50, r=20, t=50, b=50, pad=4),
+        margin=dict(l=50, r=20, t=50, b=bottom_margin),  # Dynamic bottom margin
         xaxis=dict(
             title=x_label,
             gridcolor=THEME_COLORS['dark']['gridcolor'],
@@ -438,7 +443,13 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
         showlegend=True,
         legend=dict(
             font=dict(color=THEME_COLORS['dark']['text_color']),
-            bgcolor='rgba(0,0,0,0)'
+            bgcolor='rgba(0,0,0,0)',
+            orientation="h",  # Horizontal orientation
+            yanchor="bottom",  # Anchor to bottom
+            y=-0.2 * (num_legend_rows / 3),  # Scale position based on rows
+            xanchor="center",  # Center horizontally
+            x=0.5,  # Center position
+            traceorder="normal"
         )
     )
 
@@ -465,45 +476,53 @@ def create_multi_line_plot(y_values_list, labels, title, x_label="Layer", y_labe
 
     return plot_html
 
-def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_label, layer_names, hover_mode='x unified', include_plotlyjs=True, include_theme_js=True):
+def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_label, layer_names, hover_mode='x unified', include_plotlyjs=True, include_theme_js=True, active_lines = None):
     traces = []
     
     # Get the number of colors available 
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
+    # Calculate number of legend rows needed (assuming ~2 items per row)
+    num_legend_rows = (len(labels) + 2) // 2  # Add 2 for rounding up
+    bottom_margin = max(250, 75 + (num_legend_rows * 50))  # Base 50px + 20px per row
+
     for i, (y_values, label) in enumerate(zip(y_values_list, labels)):
         # Use modulo to cycle through colors
         color_index = i % num_colors
         
-        # Use provided layer names instead of generating them
-        x_values = layer_names
+        # Determine if line is visable
+        is_visible = True if active_lines and (i in active_lines or i == len(y_values_list) + active_lines[0]) else "legendonly"
 
         trace = go.Scatter(
-            x=x_values,  # Use layer names instead of indices
+            x=layer_names,
             y=y_values,
             name=label,
             mode='lines+markers',
             line=dict(
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
-                width=2
+                # width=4 if is_highlighted else 1,  # Thicker line for highlighted trace
+                width = 4
             ),
             marker=dict(
-                size=6,
+                # size=8 if is_highlighted else 4,  # Larger markers for highlighted trace
+                size = 8,
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
                 line=dict(
                     color=THEME_COLORS['dark']['plot_bgcolor'],
                     width=1
                 )
             ),
-            hovertemplate=f'{label}<br>{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>'
+            # opacity=1.0 if is_highlighted else 0.3,  # Dim non-highlighted traces
+            opacity = 1.0,
+            hovertemplate=f'{label}<br>{x_label}: %{{x}}<br>{y_label}: %{{y:.3f}}<extra></extra>',
+            visible=is_visible
         )
         traces.append(trace)
 
-    # Create the layout
     layout = go.Layout(
         plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
         paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
-        margin=dict(l=50, r=20, t=50, b=50, pad=4),
+        margin=dict(l=50, r=20, t=50, b=bottom_margin),  # Dynamic bottom margin
         xaxis=dict(
             title=x_label,
             gridcolor=THEME_COLORS['dark']['gridcolor'],
@@ -565,6 +584,104 @@ def create_multi_line_plot_layer_names(y_values_list, labels, title, x_label, y_
     """
 
     # Add theme sync JavaScript if requested
+    if include_theme_js:
+        plot_html += get_theme_sync_js()
+
+    return plot_html
+
+def create_heatmap_plot(z_values, title, x_label="Hidden Dimension", y_label="Token Index", 
+                       colorscale=None, zmid=0, include_theme_js=False, include_plotlyjs=False):
+    """
+    Creates a heatmap plot with white at zero.
+    
+    Args:
+        z_values: 2D array of values to plot (can be PyTorch tensor or NumPy array)
+        title: Plot title
+        x_label: Label for x-axis
+        y_label: Label for y-axis
+        colorscale: Custom colorscale (optional)
+        zmid: Middle value for color scale
+        include_theme_js: Whether to include theme sync JavaScript
+        include_plotlyjs: Whether to include Plotly.js library
+    """
+    # Convert PyTorch tensor to NumPy array if necessary
+    if hasattr(z_values, 'detach'):
+        z_values = z_values.detach().cpu().numpy()
+    elif hasattr(z_values, 'numpy'):
+        z_values = z_values.numpy()
+    
+    if colorscale is None:
+        colorscale = [
+            [0, THEME_COLORS['dark']['multi_line_colors'][0]],  # Blue for negative
+            [0.5, 'white'],  # White at zero
+            [1, THEME_COLORS['dark']['multi_line_colors'][1]]   # Red for positive
+        ]
+
+    # Get max absolute value for symmetric color scale
+    max_abs_val = float(max(abs(np.min(z_values)), abs(np.max(z_values))))
+
+    trace = go.Heatmap(
+        z=z_values,
+        colorscale=colorscale,
+        zmid=zmid,
+        zmin=-max_abs_val,
+        zmax=max_abs_val,
+        showscale=True,
+        colorbar=dict(
+            title='Activation Value',
+            titleside='right',
+            thickness=15,
+            len=0.75,
+            tickfont=dict(color=THEME_COLORS['dark']['text_color']),
+            title_font=dict(color=THEME_COLORS['dark']['text_color'])
+        )
+    )
+
+    layout = go.Layout(
+        plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
+        paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
+        margin=dict(l=50, r=50, t=50, b=50),
+        xaxis=dict(
+            title=x_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        yaxis=dict(
+            title=y_label,
+            gridcolor=THEME_COLORS['dark']['gridcolor'],
+            showgrid=True,
+            zeroline=False,
+            color=THEME_COLORS['dark']['text_color']
+        ),
+        title=dict(
+            text=title,
+            font=dict(size=14, color=THEME_COLORS['dark']['text_color']),
+            x=0.5,
+            xanchor='center'
+        ),
+        autosize=True
+    )
+
+    fig = go.Figure(data=[trace], layout=layout)
+
+    config = {
+        'displayModeBar': False,
+        'staticPlot': False,
+        'responsive': True,
+    }
+
+    plot_html = f"""
+    <div class="plot-container">
+        {fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if include_plotlyjs else False,
+            config=config
+        )}
+    </div>
+    """
+
     if include_theme_js:
         plot_html += get_theme_sync_js()
 
