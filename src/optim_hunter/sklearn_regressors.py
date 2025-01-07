@@ -43,8 +43,74 @@ def create_llm_regressor(
     model_name: str,
     max_new_tokens: int = 1,
     temperature: float = 0.0
-) -> 'Callable[[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int], dict[str, Union[str, pd.DataFrame, pd.Series, list[Optional[float]]]]]':
+) -> Callable[
+    [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
+    Dict[str, Union[str, pd.DataFrame, pd.Series, List[Optional[float]]]]
+]:
+    """Create an LLM regressor with specified parameters.
 
+    Args:
+        model: The language model to use for regression
+        model_name: Name identifier for the model
+        max_new_tokens: Maximum number of tokens to generate
+        temperature: Sampling temperature for generation
+
+    Returns:
+        Callable: A function that implements LLM regression with the specified
+            configuration
+
+    """
+
+    def llm_regressor(
+            x_train: pd.DataFrame,
+            x_test: pd.DataFrame,
+            y_train: pd.Series,
+            y_test: pd.Series,
+            random_state: int = 1
+    ) -> Dict[str, Union[
+        str, pd.DataFrame, pd.Series, List[Optional[float]]]]:
+            """Run regression using the configured LLM.
+
+            Args:
+                x_train: Training features
+                x_test: Test features
+                y_train: Training labels
+                y_test: Test labels
+                random_state: Random seed for reproducibility
+
+            Returns:
+                Dict containing model info and predictions
+
+            """
+            # Prepare prompt from training data and test input
+            prompt = prepare_prompt(x_train, y_train, x_test)
+
+            # Generate prediction
+            pred_text = str(model.generate(
+                prompt, max_new_tokens=max_new_tokens, temperature=temperature
+            ))
+
+            try:
+                # Extract generated value and convert to float
+                generated_part = str(pred_text.replace(prompt, "").strip())
+                y_predict = float(generated_part)
+            except ValueError:
+                print(f"Warning: Could not parse model prediction: {pred_text}")
+                y_predict = None
+
+            # Convert test labels to numpy array with explicit type
+            y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
+
+            return {
+                "model_name": f"llm-{model_name}",
+                "x_train": x_train,
+                "x_test": x_test,
+                "y_train": y_train,
+                "y_test": pd.Series(y_test_np),
+                "y_predict": [y_predict],
+            }
+
+    return llm_regressor
 
 
 def linear_regression(
@@ -422,6 +488,7 @@ def random_forest(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = RandomForestRegressor(max_depth=3, random_state=random_state)
     model.fit(x_train, y_train)
@@ -691,7 +758,7 @@ def svm_and_scaler_regression(
     y_test: pd.Series,
     random_state: int = 1
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Support Vector Machine Regressor with standard scaling using scikit-learn.
+    """Support Vector Machine Regressor with standard scaling.
 
     Args:
         x_train: Training features
@@ -776,6 +843,7 @@ def knn_regression_v2(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = KNeighborsRegressor(weights="distance")
     model.fit(x_train, y_train)
@@ -811,6 +879,7 @@ def knn_regression_v3(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = KNeighborsRegressor(n_neighbors=3, weights="distance")
     model.fit(x_train, y_train)
@@ -846,6 +915,7 @@ def knn_regression_v4(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = KNeighborsRegressor(n_neighbors=1, weights="distance")
     model.fit(x_train, y_train)
@@ -869,10 +939,23 @@ def knn_regression_v5_adaptable(
     y_test: pd.Series,
     random_state: int = 1
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """The idea behind this function is to have a KNN model that adapts to the
-       size of the training set. Presumably, when you have very little training
-       data, you want to use a small number of neighbors. As the number of
-       examples increase, a larger numbers of neighbors is fine.
+    """Adapt KNN model neighbor count based on training set size.
+
+    Use fewer neighbors with small training sets and more neighbors as the
+    training data grows. This allows the model to work effectively across
+    different dataset sizes.
+
+    Args:
+        x_train: Training features
+        x_test: Test features
+        y_train: Training labels
+        y_test: Test labels
+        random_state: Random seed for reproducibility
+
+    Returns:
+        dict: Results dictionary containing model name, input data and
+            predictions
+
     """
     if x_train.shape[0] < 3:
         n_neighbors = 1
@@ -904,7 +987,7 @@ def knn_regression_generic(
     model_name: str,
     knn_kwargs: Dict[str, Any]
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Generic KNN regression with configurable parameters.
+    """Perform KNN regression with configurable parameters.
 
     Args:
         x_train: Training features
@@ -917,6 +1000,7 @@ def knn_regression_generic(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = KNeighborsRegressor(**knn_kwargs)
     model.fit(x_train, y_train)
@@ -946,8 +1030,11 @@ def knn_regression_search() -> List[Callable[
     Returns:
         List[Callable]: List of functions that each implement a
             different KNN regressor variant. Each function takes standard
+
+
             regression inputs (x_train, x_test, y_train, y_test) and
             returns a results dictionary.
+
     """
     idx = 0
     knn_fns: List[Callable[
@@ -1004,6 +1091,7 @@ def kernel_ridge_regression(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     model = KernelRidge()
     model.fit(x_train, y_train)
@@ -1041,6 +1129,7 @@ def lr_with_polynomial_features_regression(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     degree = cast(int, kwargs.get("degree", 2))
 
@@ -1088,9 +1177,12 @@ def spline_regression(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
-    n_knots = cast(int, kwargs.get("degree", 5))  # Same defaults as SplineTransformer
-    degree = cast(int, kwargs.get("degree", 3))  # Same defaults as SplineTransformer
+    # Same defaults as SplineTransformer
+    n_knots = cast(int, kwargs.get("degree", 5))
+    # Same defaults as SplineTransformer
+    degree = cast(int, kwargs.get("degree", 3))
 
     # Create pipeline that transforms data using SplineTransformer then
     # applies Linear Regression
@@ -1117,12 +1209,13 @@ def spline_regression(
 def baseline_average(
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    y_train: pd.Series,
+    y_train
+    : pd.Series,
     y_test: pd.Series,
     random_state: int = 1,
     **kwargs: Dict[str, Any]
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Simple baseline that predicts training set mean.
+    """Predict the mean value of the training set.
 
     Args:
         x_train: Training features
@@ -1135,9 +1228,11 @@ def baseline_average(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
     pred = float(np.mean(y_train))
-    y_predict = cast(npt.NDArray[np.float64], np.array([pred for _ in y_test]))
+    y_predict = cast(npt.NDArray[np.float64],
+                     np.array([pred for _ in range(len(y_test))]))
     y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
     return {
@@ -1158,7 +1253,7 @@ def baseline_last(
     random_state: int = 1,
     **kwargs: Dict[str, Any]
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Simple baseline that predicts last training value.
+    """Predict using the last training value as sample baseline.
 
     Args:
         x_train: Training features
@@ -1171,9 +1266,11 @@ def baseline_last(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
-    pred = float(y_train.iloc[-1])
-    y_predict = cast(npt.NDArray[np.float64], np.array([pred for _ in y_test]))
+    pred = float(y_train.values[-1]) # Use values instead of iloc
+    y_predict = cast(npt.NDArray[np.float64],
+        np.array([pred for _ in range(len(y_test))]))
     y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
     return {
@@ -1194,7 +1291,7 @@ def baseline_random(
     random_state: int = 1,
     **kwargs: Dict[str, Any]
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Simple baseline that randomly samples training values.
+    """Randomly sample training values as predictions.
 
     Args:
         x_train: Training features
@@ -1207,6 +1304,8 @@ def baseline_random(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
+
     """
     r = random.Random(random_state)
     y_train_list: list[float] = y_train.values.tolist()
@@ -1234,7 +1333,7 @@ def baseline_constant(
     random_state: int = 1,
     **kwargs: Dict[str, Any]
 ) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
-    """Simple baseline that predicts constant value.
+    """Predict a constant value.
 
     Args:
         x_train: Training features
@@ -1247,8 +1346,10 @@ def baseline_constant(
     Returns:
         dict: Results dictionary containing model name, input data and
             predictions
+
     """
-    y_predict = cast(npt.NDArray[np.float64], np.array([kwargs["constant_prediction_value"] for _ in y_test]))
+    pred_val = kwargs["constant_prediction_value"]
+    y_predict = cast(npt.NDArray[np.float64], np.full(len(y_test), pred_val))
     y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
     return {
@@ -1305,11 +1406,11 @@ def linear_regression_manual_gd(
         if hasattr(x_test, "to_numpy")
         else np.array(x_test)
     ))
-    y_test_np = cast(npt.NDArray[np.float64], (
-        y_test.to_numpy()
-        if hasattr(y_test, "to_numpy")
-        else np.array(y_test)
-    ))
+    # y_test_np = cast(npt.NDArray[np.float64], (
+    #     y_test.to_numpy()
+    #     if hasattr(y_test, "to_numpy")
+    #     else np.array(y_test)
+    # ))
 
     # Initialize parameters (weights and bias)
     n_features = x_train_np.shape[1]
@@ -1354,8 +1455,7 @@ def create_linear_regression_gd_variants(
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
         Dict[str, Union[str, pd.DataFrame, pd.Series,
              npt.NDArray[np.float64]]]]]:
-    """Factory function that creates multiple variants of linear regression
-    with gradient descent, each with different hyperparameters.
+    """Create multiple variants of linear regression with gradient descent.
 
     Args:
         steps_options (List[int]): List of gradient descent step counts to try
@@ -1371,6 +1471,7 @@ def create_linear_regression_gd_variants(
     Returns:
         List[Callable]: List of functions, each implementing linear regression
             with specific hyperparameter combinations. Each function takes
+
             the following arguments:
                 x_train (pd.DataFrame): Training features
                 x_test (pd.DataFrame): Test features
@@ -1378,6 +1479,7 @@ def create_linear_regression_gd_variants(
                 y_test (pd.Series): Test labels
                 random_state (int): Random seed
             And returns a dict with model results
+
     """
     variants: List[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
@@ -1469,7 +1571,8 @@ def create_linear_regression_gd_variants(
                             np.dot(x_train_np, weights) + bias)
 
                         # Compute gradients
-                        dw = (1 / m) * np.dot(x_train_np.T, (y_pred - y_train_np))
+                        dw = (1 / m) * np.dot(x_train_np.T,
+                            (y_pred - y_train_np))
                         db = (1 / m) * np.sum(y_pred - y_train_np)
 
                         # Apply momentum if using it

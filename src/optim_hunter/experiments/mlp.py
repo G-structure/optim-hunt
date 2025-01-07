@@ -11,7 +11,7 @@ from optim_hunter.plot_html import create_heatmap_plot
 
 import torch
 
-from typing import Dict, List, Tuple, Callable
+from typing import Dict, List, Tuple, Callable, Sequence, Any
 
 def analyze_mlp_for_specific_tokens(
     model: HookedTransformer,
@@ -20,7 +20,7 @@ def analyze_mlp_for_specific_tokens(
     feature_pos: int,
     num_last_layers: int = 10
 ) -> str:
-    """Analyze MLP activations for specific token positions in a transformer model.
+    """Analyze MLP activations for token positions in transformer model.
 
     Args:
         model: The transformer model to analyze
@@ -46,9 +46,13 @@ def analyze_mlp_for_specific_tokens(
         return act
 
     # Create hooks for each layer
-    hooks: List[
-        Tuple[str, Callable[[torch.Tensor, HookPoint], torch.Tensor]]
+    hooks: Sequence[
+        Tuple[
+            str,
+            Callable[[Any, Any], Any]  # More generic callable type
+        ]
     ] = []
+
     for layer_num in range(model.cfg.n_layers):
         hooks.append((
             f'blocks.{layer_num}.hook_mlp_out',
