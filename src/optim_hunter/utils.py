@@ -5,7 +5,7 @@ preparation,
 and tokenization for language model interactions.
 """
 
-from typing import Any, Dict, Hashable, List, Tuple, Union, cast
+from typing import Dict, Hashable, List, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -39,7 +39,7 @@ def prepare_prompt(
     x_test = x_test.round(3)
 
     # Create examples list of dicts combining x and y values
-    examples: List[Dict[Union[str, Hashable], float]] = [
+    examples_text: List[Dict[Union[str, Hashable], float]] = [
         {**x_row, y_train.name: y_val}
         for x_row, y_val in zip(
             cast(List[Dict[str, float]], x_train.to_dict("records")),
@@ -50,7 +50,7 @@ def prepare_prompt(
 
     # Create the template for examples
     template = [
-        f"{str(col_name)}: {{{str(col_name)}}}"
+        f"{col_name}: {{{col_name}}}"
         for col_name in x_train.columns.astype(str)
     ]
     template.append(f"{y_train.name}: {{{y_train.name}}}")
@@ -58,18 +58,11 @@ def prepare_prompt(
 
     # Create suffix (test case format)
     suffix = [
-        f"{str(col_name)}: {{{str(col_name)}}}"
+        f"{col_name}: {{{col_name}}}"
         for col_name in x_train.columns.astype(str)
     ]
     suffix.append(f"{y_train.name}: ")
     suffix = "\n".join(suffix)
-
-    # Format all examples using the template
-    formatted_examples: List[str] = [
-        template.format(**{k: str(v) for k,v in example.items()})
-        for example in examples
-    ]
-    examples_text = "\n\n".join(formatted_examples)
 
     # Format the test case using the suffix
     test_dict = cast(Dict[str, float], x_test.to_dict("records")[0])
@@ -90,9 +83,9 @@ def prepare_prompt(
 
 def prepare_prompt_from_tokens(
     model: HookedTransformer,
-    x_train_tokens: pd.DataFrame[Any, pd.Index],  # More specific DataFrame type
-    y_train_tokens: pd.Series[torch.Tensor],      # Series containing tensors
-    x_test_tokens: pd.DataFrame[Any, pd.Index],
+    x_train_tokens: pd.DataFrame,  # DataFrame w/ tokenized training features
+    y_train_tokens: pd.Series,     # Series w/ tokenized training labels
+    x_test_tokens: pd.DataFrame,   # DataFrame w/ tokenized test features
     prepend_bos: bool = True,
     prepend_inst: bool = True,
 ) -> torch.Tensor:
@@ -164,7 +157,8 @@ def prepare_prompt_from_tokens(
         all_tokens.extend(colon_space.tolist())
 
         # Add output value
-        all_tokens.extend(y_train_tokens.iloc[idx].tolist())
+        value = cast(torch.Tensor, y_train_tokens.iloc[idx])
+        all_tokens.extend(value.tolist())
 
     # Add separator before test case
     all_tokens.extend(double_newline.tolist())
@@ -179,7 +173,8 @@ def prepare_prompt_from_tokens(
         all_tokens.extend(colon_space.tolist())
 
         # Add feature value
-        all_tokens.extend(x_test_tokens[col].iloc[0].tolist())
+        value = cast(torch.Tensor, x_test_tokens[col].iloc[0])
+        all_tokens.extend(value.tolist())
 
         # Add newline
         all_tokens.extend(newline.tolist())
@@ -258,14 +253,16 @@ def pad_numeric_tokens(
         x_test = [cast(pd.DataFrame, x_test)]
 
     # Get zero token for padding
-    zero_token = model.to_tokens("0", truncate=True)[0][
-        -1
+    zero_token = model.to_tokens("0", truncate=True)[0
     ].cpu()  # Move to CPU
 
     # Format numeric columns to 3 sig figs
-    x_train_rounded = [x.round(3) for x in x_train]
-    y_train_rounded = [y.round(3) for y in y_train]
-    x_test_rounded = [x.round(3) for x in x_test]
+    x_train_rounded = [x_df.round(3) for x_df in x_train]
+    y_train_rounded = [y_s.round(3) for y_s in cast(List[pd.Series], y_train)]
+    x_test_rounded = [
+        x_df.round(3) for x_df in cast(List[pd.DataFrame], x_test)
+    ]
+
 
     # Function to tokenize a single number
     def tokenize_number(num: float) -> torch.Tensor:
@@ -283,23 +280,23 @@ def pad_numeric_tokens(
     # Get all numeric values (both x and y)
     all_values: List[float] = []
     for x_df in x_train_rounded + x_test_rounded:
-        for col in x_df.columns:
+        for col in cast(List[str], x_df.columns):
             all_values.extend(cast(List[float], x_df[str(col)].values.tolist()))
     for y_series in y_train_rounded:
         all_values.extend(cast(List[float], y_series.values.tolist()))
 
     # Tokenize all values and find global maximum length
-    all_tokenized = [tokenize_number(cast(float, val)) for val in all_values]
+    all_tokenized = [tokenize_number(val) for val in all_values]
     global_max_len = max(len(tokens) for tokens in all_tokenized)
 
     # Process X training data
     x_train_tokens: List[pd.DataFrame] = []
     for x_df in x_train_rounded:
         x_tokens_df = pd.DataFrame(index=x_df.index)
-        for col in x_df.columns:
+        for col in cast(List[str], x_df.columns):
             x_tokens_df[str(col)] = [
-                pad_tokens(tokenize_number(cast(float, val)), global_max_len)
-                for val in x_df[str(col)].values.tolist()
+                pad_tokens(tokenize_number(val), global_max_len)
+                for val in cast(List[float], x_df[str(col)].values.tolist())
             ]
         x_train_tokens.append(x_tokens_df)
 
@@ -307,10 +304,10 @@ def pad_numeric_tokens(
     x_test_tokens: List[pd.DataFrame] = []
     for x_df in x_test_rounded:
         x_tokens_df = pd.DataFrame(index=x_df.index)
-        for col in x_df.columns:
+        for col in cast(List[str], x_df.columns):
             x_tokens_df[str(col)] = [
-                pad_tokens(tokenize_number(cast(float, val)), global_max_len)
-                for val in x_df[str(col)].values.tolist()
+                pad_tokens(tokenize_number(val), global_max_len)
+                for val in cast(List[float], x_df[str(col)].values.tolist())
             ]
         x_test_tokens.append(x_tokens_df)
 
@@ -319,8 +316,8 @@ def pad_numeric_tokens(
     for y_series in y_train_rounded:
         y_tokens = pd.Series(
             [
-                pad_tokens(tokenize_number(cast(float, val)), global_max_len)
-                for val in y_series.values.tolist()
+                pad_tokens(tokenize_number(val), global_max_len)
+                for val in cast(List[float], y_series.values.tolist())
             ],
             index=y_series.index,
         )

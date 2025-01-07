@@ -4,7 +4,16 @@ This module provides functionality for token analysis, data generation,
 and model interaction with transformer models for optimization experiments.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 import numpy as np
 import numpy.typing as npt
@@ -80,7 +89,10 @@ def get_tokenized_prompt(
     model: HookedTransformer,
     seq_len: int,
     random_int: int,
-    dataset: Callable[[int], Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
     print_prompt: bool = True
 ) -> t.Tensor:
     """Get tokenized prompt for in-context learning.
@@ -89,8 +101,9 @@ def get_tokenized_prompt(
         model (HookedTransformer): The transformer model to use for tokenization
         seq_len (int): Length of sequence to generate
         random_int (int): Random seed for dataset generation
-        dataset (Callable[[int], Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]]):
-            Function that generates training/testing data
+        dataset (Callable): Function that returns (x_train, y_train, x_test,
+            y_test) tuple of (DataFrame, Series, DataFrame, Series) containing
+            training and test data
         print_prompt (bool): Whether to print the text prompt
 
     Returns:
@@ -101,21 +114,20 @@ def get_tokenized_prompt(
     x_train, y_train, x_test, y_test = dataset(random_int)
 
     # slice_dataset returns same types as input
-    x_train_sliced: pd.DataFrame
-    y_train_sliced: pd.Series
-    x_test_sliced: pd.DataFrame
-    y_test_sliced: pd.Series
-    x_train_sliced, y_train_sliced, x_test_sliced, y_test_sliced = slice_dataset(
+    x_train_sliced, y_train_sliced, x_test_sliced, _ = slice_dataset(
         x_train, y_train, x_test, y_test, seq_len
     )
 
-    # pad_numeric_tokens returns numpy arrays
-    x_train_tokens: npt.NDArray[np.float64]
-    y_train_tokens: npt.NDArray[np.float64]
-    x_test_tokens: npt.NDArray[np.float64]
-    x_train_tokens, y_train_tokens, x_test_tokens = pad_numeric_tokens(
-        model, x_train_sliced, y_train_sliced, x_test_sliced
+    # Cast return values from pad_numeric_tokens to DataFrames/Series
+    tokens = pad_numeric_tokens(
+        model,
+        x_train_sliced,
+        y_train_sliced,
+        x_test_sliced
     )
+    x_train_tokens = pd.DataFrame(tokens[0])
+    y_train_tokens = pd.Series(tokens[1])
+    x_test_tokens = pd.DataFrame(tokens[2])
 
     # prepare_prompt_from_tokens returns torch tensor
     tokenized_prompt: t.Tensor = prepare_prompt_from_tokens(
@@ -127,15 +139,24 @@ def get_tokenized_prompt(
         prepend_inst=True,
     )
 
-    # model.to_string returns str
-    prompt: str = model.to_string(tokenized_prompt[0])
+    # model.to_string returns str, cast to ensure string type
+    prompt: str = str(model.to_string(tokenized_prompt[0]))
     if print_prompt:
         print(prompt)
 
     return tokenized_prompt
 
 
-def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
+def check_token_positions(
+    model: HookedTransformer,
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
+    seq_len: int,
+    seed: int = 0,
+    print_info: bool = True
+) -> tuple[list[int], list[int]]:
     """Check token positions for a single sequence length and seed.
 
     Args:
@@ -171,13 +192,13 @@ def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
     ]
 
     # Get positions of first number token after each marker
-    output_positions = []
+    output_positions: list[int] = []
     for idx in output_indices:
         current_pos = idx + 3  # Skip "Output: "
         if current_pos < len(str_tokens) - 1:
             output_positions.append(current_pos)
 
-    feature_positions = []
+    feature_positions: list[int] = []
     for idx in feature_indices:
         current_pos = idx + 5  # Skip "Features n: "
         if current_pos < len(str_tokens) - 1:
@@ -201,12 +222,20 @@ def check_token_positions(model, dataset, seq_len, seed=0, print_info=True):
 
 def generate_linreg_tokens(
     model: HookedTransformer,
-    dataset: Any,
-    regressors: Any,
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
+    regressors: List[
+        Callable[
+            [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
+            Dict[str, Union[str, npt.NDArray[Any]]]  # Fixed type hint
+        ]
+    ],
     seq_len: int = 5,
     batch_size: int = 1,
     sub_batch: Optional[int] = None,
-) -> tuple[Int[Tensor, "batch"], Int[Tensor, "seq_len"]]:
+) -> Tuple[Int[t.Tensor, "batch"], List[Dict[str, Any]]]:  # noqa: F821
     """Generate linear regression in-context learning tokens for batches.
 
     Args:
@@ -222,29 +251,40 @@ def generate_linreg_tokens(
         tuple: A tuple containing:
             - linreg_tokens (Tensor): Tokenized sequences with shape
               [batch, sequence_length]
-            - data_store (list): List of dictionaries containing comparison
-              data for each batch
+            - data_store (List[Dict]): List of dictionaries containing
+               comparison data for each batch
 
     """
-    prefix = (t.ones(batch_size, 1) * model.tokenizer.bos_token_id).long().to(device)
+    # Verify model has a tokenizer
+    if not model.tokenizer:
+        raise ValueError("Model must have a tokenizer attribute")
+
+    # Cast tokenizer to correct type
+    tokenizer = cast(PreTrainedTokenizer, model.tokenizer)
+
+    # Verify tokenizer has required attributes
+    if not hasattr(tokenizer, "bos_token_id"):
+        raise ValueError("Model tokenizer must have bos_token_id")
+
+    prefix = (t.ones(batch_size, 1) * tokenizer.bos_token_id).long().to(device)
     zero_token = model.to_tokens("0", truncate=True)[0][-1]
 
     # Create list to store tokens for each batch
-    batch_tokens = []
-    data_store = []
+    batch_tokens: List[t.Tensor] = []
+    data_store: List[Dict[str, Any]] = []
 
     dataset_func = dataset
 
     # Generate tokens for each batch with different random seeds
-    if sub_batch:
+    if sub_batch is not None:
         data = create_comparison_data(
             model,
             dataset_func,
-            regressors,
+            regressors,  # Type conversion handled by create_comparison_data
             random_state=sub_batch,
             seq_len=seq_len,
         )
-        tokens = model.to_tokens(data["prompt"], truncate=True)
+        tokens = model.to_tokens(str(data["prompt"]), truncate=True)
         batch_tokens.append(tokens[0])
         data_store.append(data)
     else:
@@ -252,43 +292,42 @@ def generate_linreg_tokens(
             data = create_comparison_data(
                 model,
                 dataset_func,
-                regressors,
+                regressors,  # Type conversion handled by create_comparison_data
                 random_state=i,
                 seq_len=seq_len,
             )
-            tokens = model.to_tokens(data["prompt"], truncate=True)
+            tokens = model.to_tokens(str(data["prompt"]), truncate=True)
             batch_tokens.append(tokens[0])
             data_store.append(data)
 
     # Find the longest sequence length
-    max_len = max(len(tokens) for tokens in batch_tokens)
+    max_len = max(len(tensor) for tensor in batch_tokens)
 
     # Pad shorter sequences with token 0 at position -4
     for i in range(len(batch_tokens)):
-        while len(batch_tokens[i]) < max_len:
-            # Insert 0 at position -4 from the end
+        current_tensor = batch_tokens[i]
+        while len(current_tensor) < max_len:
             print(
                 f"Found mismatch in token length for batch {i}!\n"
                 f"Largest length: {max_len}\n"
-                f"Batch {i} length: {len(batch_tokens[i])}\n"
+                f"Batch {i} length: {len(current_tensor)}\n"
                 f"Applying padding..."
             )
             print(
                 f"\nBefore Zero Token Padding:\n#####\n"
-                f"{model.to_string(batch_tokens[i][-50:])}\n#####"
+                f"{model.to_string(current_tensor[-50:])}\n#####"
             )
             batch_tokens[i] = t.cat(
                 [
-                    batch_tokens[i][: len(batch_tokens[i]) - 3],
-                    zero_token.unsqueeze(
-                        0
-                    ),  # Add unsqueeze to make zero_token 1-dimensional
-                    batch_tokens[i][len(batch_tokens[i]) - 3 :],
+                    current_tensor[: len(current_tensor) - 3],
+                    zero_token.unsqueeze(0),
+                    current_tensor[len(current_tensor) - 3:],
                 ]
             )
+            current_tensor = batch_tokens[i]
             print(
                 f"\nAfter Zero Token Padding:\n#####\n"
-                f"{model.to_string(batch_tokens[i][-50:])}\n#####"
+                f"{model.to_string(current_tensor[-50:])}\n#####"
             )
 
     # Stack all batches together
@@ -300,8 +339,21 @@ def generate_linreg_tokens(
 
 
 def run_and_cache_model_linreg_tokens(
-    model: HookedTransformer, dataset, regressors, seq_len: int, batch: int = 1
-) -> tuple[Tensor, Tensor, ActivationCache, List]:
+    model: HookedTransformer,
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
+    regressors: List[
+        Callable[
+            [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
+            Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[
+                np.float64]]]
+        ]
+    ],
+    seq_len: int,
+    batch: int = 1
+) -> tuple[Tensor, Tensor, ActivationCache, List[Dict[str, Any]]]:
     """Generate tokens, run model and return results with cache.
 
     Args:
@@ -326,16 +378,35 @@ def run_and_cache_model_linreg_tokens(
         model, dataset, regressors, seq_len, batch
     )
     linreg_logits, linreg_cache = model.run_with_cache(linreg_tokens)
-    return linreg_tokens, linreg_logits, linreg_cache, linreg_data_store
+    return (
+        linreg_tokens,
+        cast(Tensor, linreg_logits),
+        linreg_cache,
+        linreg_data_store
+    )
 
 
 def run_and_cache_model_linreg_tokens_batched(
     model: HookedTransformer,
-    dataset,
-    regressors,
+    dataset: Callable[
+        [int],
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
+    regressors: List[
+        Callable[
+            [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
+            Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[
+                np.float64]]]
+        ]
+    ],
     seq_len: int,
     total_batch: int = 1,
-) -> tuple[List[Tensor], List[Tensor], List[ActivationCache], List]:
+) -> tuple[
+    List[Tensor],
+    List[Tensor],
+    List[ActivationCache],
+    List[Dict[str, Any]]
+]:
     """Generate batched linear regression tokens, run model and cache results.
 
     Args:
@@ -358,10 +429,10 @@ def run_and_cache_model_linreg_tokens_batched(
               data for each batch
 
     """
-    all_tokens = []
-    all_logits = []
-    all_caches = []
-    all_data_stores = []
+    all_tokens: List[Tensor] = []
+    all_logits: List[Tensor] = []
+    all_caches: List[ActivationCache] = []
+    all_data_stores: List[Dict[str, Any]] = []
 
     # Process data in smaller batches
     for i in range(total_batch):
@@ -378,7 +449,7 @@ def run_and_cache_model_linreg_tokens_batched(
 
         # Move results to CPU to free GPU memory
         all_tokens.append(batch_tokens.cpu())
-        all_logits.append(batch_logits.cpu())
+        all_logits.append(cast(Tensor, batch_logits).cpu())
         all_caches.append(batch_cache.to("cpu"))
         all_data_stores.extend(batch_data_store)
 

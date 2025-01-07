@@ -1,7 +1,8 @@
 """Module for attention visualization and analysis in transformer models.
 
-Contains functions for calculating and visualizing different types of attention scores
-including induction scores, per-example scores, and accumulated attention scores.
+Contains functions for calculating and visualizing different types of attention
+scores including induction scores, per-example scores, and accumulated attention
+scores.
 """
 import functools
 
@@ -28,7 +29,7 @@ def attention(
         Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
     ],
 ) -> str:
-    """Generate attention visualization plots comparing different attention mechanisms.
+    """Generate attention viz plots comparing different attention mechanisms.
 
     Args:
         model: The transformer model to analyze
@@ -76,7 +77,7 @@ def attention(
         n_heads, output_pos_len), device=device)
 
     def induction_score_hook(
-        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
+        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],  # noqa: F722
         hook: HookPoint,
     ) -> None:
         # Take diagonal of attention paid from each destination position to
@@ -90,7 +91,7 @@ def attention(
         induction_score_store[hook.layer(), :] = induction_score
 
     def accumulated_attention_hook(
-        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
+        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],  # noqa: F722
         hook: HookPoint,
         output_positions: list[int],
         feature_positions: list[int]
@@ -136,7 +137,7 @@ def attention(
             all_example_accumulated_score_store[hook.layer(), :] = example_score
 
     def all_example_hook(
-        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],
+        pattern: Float[t.Tensor, "batch head_index dest_pos source_pos"],  # noqa: F722
         hook: HookPoint,
         output_positions: list[int],
         feature_positions: list[int]
