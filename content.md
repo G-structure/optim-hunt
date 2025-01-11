@@ -292,7 +292,7 @@ By examining how these differences evolve through the model's layers, we can und
 
 <<execute id="3" output="raw">>
 ```python
-from optim_hunter.experiments.logit_diff import generate_logit_diff_hooked
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.llama_model import load_llama_model
@@ -300,13 +300,15 @@ from optim_hunter.llama_model import load_llama_model
 model = load_llama_model()
 model_name = "llama-8b"
 
-seq_len = 25
-batches = 1
+seq_len = 19
+batches = 10
 
-regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random]
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
 
-html = generate_logit_diff_hooked(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=model)
-print(html)
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+plots = generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=model)
+print(plots)
 ```
 <</execute>>
 
@@ -315,6 +317,54 @@ Average vs llm-llama-8b, and Last vs llm-llama-8b offer the most value here.
 We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation.
 
 <<execute id="4" output="raw">>
+```python
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+model = load_llama_model()
+model_name = "llama-8b"
+
+seq_len = 19
+
+low_mse = [0, 1, 3, 5, 8, 10, 11, 12, 14, 16, 18, 20, 21, 22, 24, 25, 26, 27, 28, 33, 34, 35, 36, 39, 40, 41, 43, 44, 47, 48, 49, 50, 51, 54, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 73, 76, 77, 80, 81, 82, 84, 86, 87, 88, 89, 91, 92, 94, 95, 97, 99]
+n_low_mse = len(low_mse)
+
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+plots = generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=n_low_mse, model=model, random_seeds=low_mse)
+print(plots)
+```
+<</execute>>
+
+<<execute id="5" output="raw">>
+```python
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+model = load_llama_model()
+model_name = "llama-8b"
+
+seq_len = 19
+
+low_mse = [0, 1, 3, 5, 8, 10, 11, 12, 14, 16, 18, 20, 21, 22, 24, 25, 26, 27, 28, 33, 34, 35, 36, 39, 40, 41, 43, 44, 47, 48, 49, 50, 51, 54, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 73, 76, 77, 80, 81, 82, 84, 86, 87, 88, 89, 91, 92, 94, 95, 97, 99]
+high_mse = [i for i in range(100) if i not in low_mse]
+n_high_mse = len(high_mse)
+
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+plots = generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=n_high_mse, model=model, random_seeds=high_mse)
+print(plots)
+```
+<</execute>>
+
 ```python
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
 from optim_hunter.llama_model import load_llama_model
@@ -329,12 +379,14 @@ output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_i
 html = attention(model, num_seeds, seq_len, dataset)
 print(html)
 ```
-<</execute>>
 
+
+^^^
 A lot of over lap with induction heads which is expected.
 L27H28, L28H29, L27H30 look interesting
+^^^
 
-<<execute id="5" output="raw">>
+
 ```python
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
 from optim_hunter.llama_model import load_llama_model
@@ -350,97 +402,8 @@ output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_i
 html = analyze_mlp_for_specific_tokens(model, tokens, output_pos, feature_pos, num_last_layers=10)
 print(html)
 ```
-<</execute>>
-## Distribution Analysis: Moving Beyond Logit Differences
 
-^^^
-The logit diff metric from IOI was designed for a classification-like task (predicting one token vs another), while linear regression is fundamentally about predicting continuous values.
-^^^
 
-While logit differences give us insight into the model's internal processing, we need different tools to understand how well it's actually performing regression. Let's analyze the statistical properties of its predictions:
-
-```python
-from optim_hunter.experiments.prediction_distribution import analyze_distribution_batched
-from optim_hunter.sklearn_regressors import (
-    linear_regression, knn_regression, random_forest,
-    baseline_average, baseline_last, baseline_random
-)
-from optim_hunter.datasets import get_dataset_friedman_2
-
-seq_len = 25  # Number of examples to learn from
-batches = 1   # Number of different random seeds to try
-regressors = [
-    linear_regression, knn_regression, random_forest,
-    baseline_average, baseline_last, baseline_random
-]
-
-results = analyze_distribution_batched(
-    dataset=get_dataset_friedman_2,
-    regressors=regressors,
-    seq_len=seq_len,
-    batches=batches
-)
-```
-
-This analysis gives us several key insights into how the model performs regression:
-
-1. **Quality of Fit**: The R² scores tell us how much variance in the target variable our model explains. For the Friedman #2 dataset, we see:
-```python
-print(f"R² score: {results['r2_mean']:.3f} ± {results['r2_std']:.3f}")
-# R² score: 0.943 ± 0.015
-```
-   This high R² indicates the model is capturing most of the underlying relationship.
-
-2. **Residual Analysis**: The residuals (differences between predictions and true values) reveal any systematic biases:
-
-```python
-residuals = results['residuals']
-plot_residual_distribution(residuals)
-```
-   We observe:
-   - Nearly symmetric distribution around zero (no systematic bias)
-   - Roughly constant variance across prediction range (homoscedasticity)
-   - Some heavy tails, suggesting the model is occasionally "surprised"
-
-3. **Calibration Analysis**: QQ plots compare our residuals to theoretical normal distributions:
-```python
-plot_qq(residuals, 'Model Residuals vs Normal Distribution')
-```
-   The close match to the diagonal line suggests well-calibrated uncertainty estimates, though with slightly heavier tails than a normal distribution would predict.
-
-4. **Layer-wise Evolution**: Most interestingly, we can track how predictions evolve through the model's layers:
-```python
-layer_metrics = results['layer_metrics']
-plot_metric_evolution(layer_metrics['r2'], 'R² Score by Layer')
-```
-   We observe:
-   - Initial layers (0-3): Rapid improvement in R²
-   - Middle layers (4-8): Gradual refinement
-   - Final layers (9+): Minimal change, suggesting convergence
-
-This pattern of gradual refinement strongly suggests the model is performing something akin to iterative optimization, rather than simple function approximation or lookup.
-
-Let's zoom in on one particularly interesting phenomenon - the correlation between prediction uncertainty and the number of similar examples in the training set:
-
-```python
-def plot_uncertainty_vs_density(results):
-    """Scatter plot of residual magnitude vs local example density"""
-    plt.scatter(
-        results['local_density'],
-        np.abs(results['residuals']),
-        alpha=0.5
-    )
-    plt.xlabel('Number of nearby training examples')
-    plt.ylabel('Absolute residual')
-```
-
-This reveals that the model makes more accurate predictions in regions of the input space where it has seen more similar examples - much like traditional methods such as k-nearest neighbors. However, unlike kNN, it maintains reasonable performance even in sparse regions, suggesting it has learned some general rules about the underlying function.
-
-This statistical analysis complements our earlier logit-based investigation by showing not just how the model processes information internally, but how well it actually learns to perform regression. The results suggest it's doing more than just memorization or simple interpolation - it appears to be learning genuine statistical patterns from the data, much like traditional regression methods.~~~
-
-^^^
-In practice, we often care more about prediction quality than internal mechanics. However, understanding both gives us confidence that the model is learning robust and generalizable patterns rather than taking shortcuts.
-^^^
 
 ## References
 
