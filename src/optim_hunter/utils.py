@@ -197,7 +197,7 @@ def slice_dataset(
     n: int = 10
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Slice the first n items from each dataset while preserving DataFrame
-    structure.
+structure.
 
     Args:
         x_train (pd.DataFrame): Training features
@@ -253,8 +253,7 @@ def pad_numeric_tokens(
         x_test = [cast(pd.DataFrame, x_test)]
 
     # Get zero token for padding
-    zero_token = model.to_tokens("0", truncate=True)[0
-    ].cpu()  # Move to CPU
+    zero_token = model.to_tokens("0", truncate=True, prepend_bos=False)[0].cpu()
 
     # Format numeric columns to 3 sig figs
     x_train_rounded = [x_df.round(3) for x_df in x_train]
@@ -273,7 +272,7 @@ def pad_numeric_tokens(
     # Function to pad tokens to target length
     def pad_tokens(tokens: torch.Tensor, max_len: int) -> torch.Tensor:
         if len(tokens) < max_len:
-            padding = torch.tensor([zero_token] * (max_len - len(tokens)))
+            padding = zero_token.repeat(max_len - len(tokens))
             return torch.cat([tokens, padding])
         return tokens
 

@@ -14,20 +14,42 @@
 ;; --- Cache Management ---
 (defn load-cache []
   (println "\n=== Loading Cache ===")
-  (try
-    (let [cache (json/parse-string (slurp cache-file))]
-      (println "Loaded" (count cache) "cached outputs")
-      cache)
-    (catch Exception _
-      (println "No cache file found or error reading cache. Starting with empty cache.")
-      {})))
+  (let [cache-path cache-file]
+    (when (.exists (io/file cache-path))
+      (println "Cache file exists at:" cache-path)
+      (try
+        (let [cache-content (slurp cache-path)
+              _ (println "Cache content length:" (count cache-content))
+              ;; Read cache as plain string and parse manually
+              cache (if (str/starts-with? cache-content "{")
+                     (let [content (-> cache-content
+                                     (subs 1 (dec (count cache-content))) ; Remove outer {}
+                                     (str/split #"\,(?=\s*\"[^\"]+\":)"))] ; Split on commas between key-value pairs
+                       (into {}
+                             (for [pair content]
+                               (let [[k v] (str/split pair #":" 2)
+                                     key (str/replace (str/trim k) #"\"" "")
+                                     val (str/trim v)]
+                                 [key val]))))
+                     {})]
+          (println "Successfully parsed cache with" (count cache) "entries")
+          (println "Cache keys:" (keys cache))
+          cache)
+        (catch Exception e
+          (println "Error reading cache:" (str e))
+          {})))))
 
 (defn save-cache [cache]
   (println "\n=== Saving Cache ===")
   (println "Saving" (count cache) "outputs to cache")
-  (spit cache-file (json/generate-string cache)))
+  (let [cache-str (str "{"
+                      (str/join ","
+                               (for [[k v] cache]
+                                 (format "\"%s\":%s" k v)))
+                      "}")]
+    (spit cache-file cache-str)))
 
-;; --- Code formating
+;; --- Code formatting ---
 (defn wrap-code-block [code lang]
   (format "<div class=\"code-block\"><pre class=\"line-numbers\"><code class=\"language-%s\">%s</code></pre></div>"
           lang
@@ -37,11 +59,11 @@
 
 (defn process-code-blocks [content]
   (println "\n=== Processing Code Blocks ===")
-  ;; Handle regular markdown code blocks
   (let [code-block-pattern #"(?ms)```(\w+)\n(.*?)\n```"]
     (str/replace content code-block-pattern
                 (fn [[_ lang code]]
-                  (when-not (str/includes? content (format "<<execute") )
+                  (if (str/includes? content "<<execute")
+                    (str "```" lang "\n" code "\n```")
                     (wrap-code-block code lang))))))
 
 ;; --- Code Execution and Processing ---
@@ -52,16 +74,20 @@
 (defn run-python [code]
   (println "\n=== Executing Python Code ===")
   (println "Code to execute:\n" code)
-  (let [res (shell/sh "python3" "-c" code)]
-    (if (zero? (:exit res))
-      (let [output (:out res)]
-        (println "Execution successful. Output length:" (count output))
-        (if (is-html? output)
-          output
-          (str "<pre class=\"code-output\">" output "</pre>")))
-      (do
-        (println "Error running python code:" (:err res))
-        (str "<pre class=\"code-error\">" (:err res) "</pre>")))))
+  (try
+    (let [res (shell/sh "python3" "-c" code)]
+      (if (zero? (:exit res))
+        (let [output (:out res)]
+          (println "Execution successful. Output length:" (count output))
+          (if (is-html? output)
+            output
+            (str "<pre class=\"code-output\">" output "</pre>")))
+        (do
+          (println "Error running python code:" (:err res))
+          (str "<pre class=\"code-error\">" (:err res) "</pre>"))))
+    (catch Exception e
+      (println "Exception running Python:" (str e))
+      (str "<pre class=\"code-error\">Error: " (str e) "</pre>"))))
 
 (defn markdown->html [markdown]
   (println "\n=== Converting Markdown to HTML ===")
@@ -90,24 +116,11 @@
       (str/replace content sidenote-pattern process-single-sidenote))))
 
 ;; --- Block Parsing ---
-(defn parse-execute-tag [tag]
-  (let [id-match (re-find #"id=\"(\d+)\"" tag)
-        output-match (re-find #"output=\"(raw|pandoc)\"" tag)]
-    (when (not id-match)
-      (throw (Exception. "Execute tag missing required id attribute")))
-    {:id (second id-match)
-     :output-type (or (second output-match) "raw")}))
-
 (defn find-code-blocks [content]
   (println "\n=== Finding Code Blocks ===")
   (let [block-pattern #"(?ms)<<execute\s+id=\"(\d+)\"\s+output=\"([^\"]+)\">>\s*```python\n(.*?)\n```\s*<<\/execute>>"
         matches (re-seq block-pattern content)]
     (println "Found" (count matches) "code blocks")
-    (doseq [[_ id output-type code] matches]
-      (println "\nBlock ID:" id)
-      (println "Output type:" output-type)
-      (println "Code preview:" (subs code 0 (min 50 (count code))) "..."))
-
     (let [blocks (map (fn [[full-match id output-type code]]
                        {:id id
                         :output-type output-type
@@ -146,29 +159,14 @@
   (let [cache (atom (load-cache))
         blocks (find-code-blocks content)]
 
-    ;; Process each block
     (doseq [block blocks]
       (println "\nProcessing block" (:id block))
-      (if (= (:id block) compute-id)
-        ;; If this is the block we want to compute, execute it regardless of cache
-        (do
-          (println "Forcing execution of block" (:id block))
-          (let [output (run-python (:code block))
-                processed (process-output output (:output-type block))]
-            (swap! cache assoc (:id block) processed)
-            (println "Updated cache for block" (:id block))))
-        ;; For all other blocks, use cache if available
-        (if-let [cached-output (get @cache (:id block))]
-          (println "Using cached output for block" (:id block))
-          (do
-            ;; Only execute if no cache available
-            (println "No cache found for block" (:id block) ". Executing...")
-            (let [output (run-python (:code block))
-                  processed (process-output output (:output-type block))]
-              (swap! cache assoc (:id block) processed)
-              (println "Cached new output for block" (:id block)))))))
+      (when (or (nil? compute-id) (= (:id block) compute-id))
+        (let [output (run-python (:code block))
+              processed (process-output output (:output-type block))]
+          (swap! cache assoc (:id block) processed)
+          (println "Updated cache for block" (:id block)))))
 
-    ;; Replace blocks in content with both code display and output
     (let [final-content (reduce (fn [content block]
                                 (let [block-output (get @cache (:id block))
                                       code-display (wrap-code-block (:code block) "python")
@@ -177,7 +175,7 @@
                                     (-> content
                                         (str/replace (:full-match block)
                                                    (if (str/includes? content output-tag)
-                                                     code-display ; Show code but remove execute block
+                                                     code-display
                                                      (str code-display block-output)))
                                         (str/replace output-tag block-output))
                                     (do
