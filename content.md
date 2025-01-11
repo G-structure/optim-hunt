@@ -260,7 +260,8 @@ seq_len = 25
 batches = 100
 regressors = [ ridge, lasso, mlp_universal_approximation_theorem1, mlp_universal_approximation_theorem2, mlp_universal_approximation_theorem3, mlp_deep1, mlp_deep2, mlp_deep3, random_forest, bagging, gradient_boosting, adaboost, bayesian_regression1, svm_regression, svm_and_scaler_regression, knn_regression, knn_regression_v2, knn_regression_v3, knn_regression_v4, knn_regression_v5_adaptable, kernel_ridge_regression, baseline_average, baseline_last, baseline_random]
 
-compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=llama_model)
+html = compare_llm_and_regressors(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=llama_model)
+print(html)
 ```
 <</execute>>
 
@@ -291,7 +292,7 @@ By examining how these differences evolve through the model's layers, we can und
 
 <<execute id="3" output="raw">>
 ```python
-from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+from optim_hunter.experiments.logit_diff import generate_logit_diff_hooked
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.llama_model import load_llama_model
@@ -302,11 +303,10 @@ model_name = "llama-8b"
 seq_len = 25
 batches = 1
 
-llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random]
 
-regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
-
-generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=model)
+html = generate_logit_diff_hooked(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=batches, model=model)
+print(html)
 ```
 <</execute>>
 
