@@ -16,7 +16,7 @@ from optim_hunter.logging_config import setup_logging
 from optim_hunter.plot_html import create_bar_plot, with_identifier
 from optim_hunter.utils import prepare_dataset_prompts, create_regressor_results, extract_model_prediction
 import re
-
+import numpy as np
 # Set up logging
 setup_logging("DEBUG")
 
@@ -193,11 +193,63 @@ def generate_and_compare_predictions(
         "average_mse": avg_mse_final
     }
 
+def analyze_low_mse_seeds(results: Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]) -> Tuple[List[int], str]:
+    """Analyze and plot results for seeds with low MSE (<30,000) for LLaMA-7B.
+
+    Args:
+        results: Results dictionary from generate_and_compare_predictions
+
+    Returns:
+        Tuple of low MSE seeds list and HTML plot
+    """
+    individual_results = cast(List[Dict[str, Any]], results["individual_results"])
+
+    # Find seeds with low MSE
+    low_mse_seeds = []
+    low_mse_results = {}
+
+    for result in individual_results:
+        seed = result["sample_id"]
+        if "LLaMA-7B" in result["mse_scores"]:
+            llm_mse = result["mse_scores"]["LLaMA-7B"]
+            if llm_mse < 30000:
+                low_mse_seeds.append(seed)
+                # Store all method scores for this seed
+                low_mse_results[seed] = result["mse_scores"]
+
+    # Create plot for low MSE seeds only
+    @with_identifier("low-mse-comparison")
+    def create_low_mse_plot() -> str:
+        # Reorganize data for plotting
+        methods = set().union(*(scores.keys() for scores in low_mse_results.values()))
+        avg_mse = {method: [] for method in methods}
+
+        for scores in low_mse_results.values():
+            for method, mse in scores.items():
+                if mse is not None:
+                    avg_mse[method].append(float(mse))
+
+        # Calculate averages for low MSE seeds
+        avg_mse_final = {
+            method: sum(scores) / len(scores)
+            for method, scores in avg_mse.items()
+            if scores
+        }
+
+        return create_bar_plot(
+            x_values=list(avg_mse_final.keys()),
+            y_values=list(avg_mse_final.values()),
+            title=f"Average MSE Across Methods (Low MSE Seeds: {low_mse_seeds})",
+            x_label="Method",
+            y_label="Mean Squared Error",
+            include_plotlyjs=True,
+            include_theme_js=True,
+        )
+
+    return low_mse_seeds, create_low_mse_plot()
+
 def compare_llm_and_regressors(
-    dataset: Callable[
-        ...,
-        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
-    ],
+    dataset: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
     regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
     seq_len: Optional[int],
     batches: int,
@@ -205,16 +257,8 @@ def compare_llm_and_regressors(
 ) -> str:
     """Compare predictions between language model and regression baselines.
 
-    Args:
-        dataset: Function that returns dataset splits
-        regressors: List of regression functions to compare
-        seq_len: Optional sequence length to slice dataset
-        batches: Number of batches/samples to generate
-        model: The language model to evaluate
-
     Returns:
-        str: HTML of the MSE comparison plot
-
+        Tuple[str, str]: HTML of both the full MSE comparison plot and low MSE seeds plot
     """
     results = generate_and_compare_predictions(
         model=model,
@@ -224,6 +268,7 @@ def compare_llm_and_regressors(
         seq_len=seq_len,
     )
 
+    # Original MSE plot
     @with_identifier("mse-comparison")
     def create_mse_plot(
         results: Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]
@@ -240,4 +285,13 @@ def compare_llm_and_regressors(
         )
 
     mse_plot = create_mse_plot(results)
-    return mse_plot
+
+    # Get low MSE analysis
+    low_mse_seeds, low_mse_plot = analyze_low_mse_seeds(results)
+
+    # Print low MSE seeds
+    text = f"Seeds with LLM MSE < 30,000: {low_mse_seeds}"
+
+    plots = f"{mse_plot} \n {text} \n {low_mse_plot}"
+
+    return plots
