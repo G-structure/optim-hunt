@@ -412,3 +412,68 @@ def prepare_dataset_prompts(
         )
 
     return prompts_and_data
+
+def create_regressor_results(
+    dataset: Union[Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series],
+                  List[Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]]],
+    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
+    random_state: int = 1
+) -> Union[Tuple[pd.DataFrame, pd.DataFrame], List[Tuple[pd.DataFrame, pd.DataFrame]]]:
+    """Create DataFrame(s) with regressor predictions and performance metrics.
+
+    Args:
+        dataset: Single tuple or list of tuples containing:
+            (x_train, y_train, x_test, y_test)
+        regressors: List of regression functions to compare
+        random_state: Random seed for reproducibility. Defaults to 1.
+
+    Returns:
+        Union[Tuple[pd.DataFrame, pd.DataFrame], List[Tuple[pd.DataFrame, pd.DataFrame]]]:
+            For single dataset:
+                Tuple containing:
+                - DataFrame with predictions and true values
+                - DataFrame with MSE for each regressor
+            For multiple datasets:
+                List of such tuples
+    """
+    # Handle single dataset case
+    is_single = not isinstance(dataset, list)
+    datasets = [dataset] if is_single else dataset
+
+    results = []
+
+    for dataset_tuple in datasets:
+        x_train, y_train, x_test, y_test = dataset_tuple
+
+        # Initialize predictions dict with true values
+        predictions = {
+            'true_value': y_test.values
+        }
+
+        # Initialize MSE dict
+        mse_dict = {}
+
+        # Get predictions and calculate MSE for each regressor
+        for regressor in regressors:
+            result = regressor(x_train, x_test, y_train, y_test, random_state)
+            model_name = str(result['model_name'])
+            model_predictions = result['y_predict']
+
+            # Store predictions
+            predictions[model_name] = model_predictions
+
+            # Calculate MSE
+            mse = np.mean((y_test.values - model_predictions) ** 2)
+            mse_dict[model_name] = mse
+
+        # Create DataFrames
+        predictions_df = pd.DataFrame(predictions)
+        mse_df = pd.DataFrame([mse_dict]).T.rename(columns={0: 'MSE'})
+
+        results.append((predictions_df, mse_df))
+
+    # Return single tuple if input was single dataset
+    if is_single:
+        return results[0]
+
+    return results
