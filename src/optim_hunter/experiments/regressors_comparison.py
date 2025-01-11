@@ -12,9 +12,10 @@ from transformer_lens import (
     HookedTransformer,
 )
 
-from optim_hunter.data_model import create_comparison_data
 from optim_hunter.logging_config import setup_logging
 from optim_hunter.plot_html import create_bar_plot, with_identifier
+from optim_hunter.utils import prepare_dataset_prompts, create_regressor_results, extract_model_prediction
+import re
 
 # Set up logging
 setup_logging("DEBUG")
@@ -30,16 +31,74 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 MAIN = __name__ == "__main__"
 
+def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    """Calculate comprehensive set of regression metrics.
+
+    Args:
+        y_true: Array of true values
+        y_pred: Array of predicted values
+
+    Returns:
+        Dict containing calculated metrics
+    """
+    # Handle edge cases
+    if len(y_true) == 0 or len(y_pred) == 0:
+        return {}
+
+    # Basic error calculations
+    errors = y_true - y_pred
+    abs_errors = np.abs(errors)
+    squared_errors = errors ** 2
+
+    # Core metrics
+    mse = np.mean(squared_errors)
+    rmse = np.sqrt(mse)
+    mae = np.mean(abs_errors)
+
+    # R-squared calculation
+    ss_res = np.sum(squared_errors)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+
+    # MAPE calculation (avoiding division by zero)
+    non_zero_mask = y_true != 0
+    mape = np.mean(abs_errors[non_zero_mask] / np.abs(y_true[non_zero_mask])) * 100 if any(non_zero_mask) else np.inf
+
+    # Bias/Variance metrics
+    bias = np.mean(errors)
+    variance = np.var(y_pred)
+    std_error = np.std(errors)
+
+    # Distribution metrics
+    max_error = np.max(abs_errors)
+    error_25th = np.percentile(abs_errors, 25)
+    error_50th = np.percentile(abs_errors, 50)
+    error_75th = np.percentile(abs_errors, 75)
+
+    return {
+        # Core metrics
+        'MSE': mse,
+        'RMSE': rmse,
+        'MAE': mae,
+        'R2': r2,
+        'MAPE': mape if mape != np.inf else None,
+
+        # Bias/Variance metrics
+        'Bias': bias,
+        'Variance': variance,
+        'Std_Error': std_error,
+
+        # Distribution metrics
+        'Max_Error': max_error,
+        'Error_25th': error_25th,
+        'Error_50th': error_50th,
+        'Error_75th': error_75th
+    }
 
 def generate_and_compare_predictions(
     model: HookedTransformer,
-    dataset_func: Callable[
-        ...,
-        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
-    ],
-    regressors: List[
-        Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]
-    ],
+    dataset_func: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
+    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
     num_samples: int = 5,
     seq_len: Optional[int] = None
 ) -> Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]:
@@ -57,88 +116,82 @@ def generate_and_compare_predictions(
         dict: MSE scores and predictions for each sample
 
     """
+    # Generate prompts and datasets
+    prompts_and_data = prepare_dataset_prompts(
+        dataset_fns=dataset_func,
+        n_samples=num_samples,
+        model=model,
+        seq_len=seq_len or 10,
+        random_seeds=list(range(num_samples))
+    )
+
     all_results: List[Dict[str, Any]] = []
 
-    # Generate multiple samples
-    for i in range(num_samples):
-        # Get data and predictions using create_comparison_data
-        data = create_comparison_data(
-            model, dataset_func, regressors,
-            random_state=i, seq_len=seq_len
+    # Process each prompt and dataset
+    for i, (prompt_tensor, x_test, dataset_name) in enumerate(prompts_and_data):
+        # Get dataset with same random seed
+        dataset_tuple = dataset_func(random_state=i)
+
+        # Get regressor predictions and MSE
+        predictions_df, mse_df = create_regressor_results(
+            dataset=dataset_tuple,
+            regressors=regressors,
+            random_state=i
         )
 
-        # Get the prompt
-        prompt = str(data["prompt"])
-
-        # Generate model prediction 4 tokens
-        pred_text = str(
-            model.generate(prompt, max_new_tokens=16, temperature=0)
+        # Get LLM prediction
+        model_pred = extract_model_prediction(
+            model=model,
+            prompt_tensor=prompt_tensor,
+            sample_id=i,
         )
 
-        # Extract the numeric prediction from the generated text
-        try:
-            # Clean the prediction text - remove the prompt and keep only the
-            # generated part
-            generated_part = str(pred_text.replace(prompt, "").strip())
-            # Find first number with space after it
-            import re
 
-            pattern = r"[+-]?(?:\d*\.)?\d+"
-            match = re.search(pattern, str(generated_part))
-            if match:
-                end_pos = match.end()
-                generated_part = generated_part[:end_pos]
-            model_pred = float(generated_part)
-        except ValueError:
-            print(
-                f"Warning: Could not parse model prediction for sample {i}: "
-                f"{pred_text}"
-            )
-            model_pred = None
-
-        # Access predictions dictionary and get gold value safely using get()
-        predictions_dict = cast(Dict[str, Any], data["predictions"])
-        gold_value = float(predictions_dict.get("gold", 0))
-
-        sample_results: Dict[str, Any] = {
-            "sample_id": i,
-            "predictions": {
-                "llama 8b 4 tokens": model_pred,
-                "gold": gold_value
-            },
-            "mse_scores": {},
+        # Add LLM prediction to results
+        true_value = float(predictions_df['true_value'].iloc[0])
+        predictions = {
+            "true_value": true_value,
+            **{col: predictions_df[col].iloc[0]
+               for col in predictions_df.columns
+               if col != 'true_value'},
+            "LLaMA-7B": model_pred  # Use model name instead of generic "llm"
         }
 
-        # Add predictions from all regressors
-        predictions = cast(Dict[str, Any], data["predictions"])
-        for reg_name, pred_value in predictions.items():
-            if reg_name != "gold":
-                sample_results["predictions"][reg_name] = float(pred_value)
+        # Calculate MSE for all predictions including LLM
+        mse_scores = {name: float(mse_df.loc[name, 'MSE'])
+                     for name in mse_df.index}
+        if model_pred is not None:
+            mse_scores['LLaMA-7B'] = float((model_pred - true_value) ** 2)
 
-        # Calculate MSE scores for all predictions including the model's
-        predictions_dict = cast(Dict[str, Any], sample_results["predictions"])
-        for method, pred in predictions_dict.items():
-            if method != "gold" and pred is not None:
-                mse_scores = cast(Dict[str, float],
-                                         sample_results["mse_scores"])
-                mse_scores[method] = float((pred - gold_value) ** 2)
+        sample_results = {
+            "sample_id": i,
+            "dataset": dataset_name,
+            "predictions": predictions,
+            "mse_scores": mse_scores
+        }
 
         all_results.append(sample_results)
 
     # Calculate average MSE across all samples
-    avg_mse: Dict[str, List[float]] = {
-        method: [] for method in all_results[0]["mse_scores"].keys()
-    }
-    for result in all_results:
-        for method, mse in result["mse_scores"].items():
-            avg_mse[method].append(float(mse))
+    methods = set().union(*(r['mse_scores'].keys() for r in all_results))
+    avg_mse = {method: [] for method in methods}
 
-    avg_mse_final: Dict[str, float] = {
+    for result in all_results:
+        for method, mse in result['mse_scores'].items():
+            if mse is not None:  # Only include valid MSE scores
+                avg_mse[method].append(float(mse))
+
+    # Calculate final averages, excluding any methods with no valid scores
+    avg_mse_final = {
         method: sum(scores) / len(scores)
         for method, scores in avg_mse.items()
+        if scores
     }
 
-    return {"individual_results": all_results, "average_mse": avg_mse_final}
+    return {
+        "individual_results": all_results,
+        "average_mse": avg_mse_final
+    }
 
 def compare_llm_and_regressors(
     dataset: Callable[
