@@ -5,7 +5,7 @@ preparation,
 and tokenization for language model interactions.
 """
 
-from typing import Dict, Hashable, List, Tuple, Union, cast, callable
+from typing import Dict, Hashable, List, Tuple, Union, cast, Callable, Any, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -14,6 +14,7 @@ import torch
 from transformer_lens import (
     HookedTransformer,
 )
+import re
 
 
 def prepare_prompt(
@@ -332,10 +333,12 @@ def pad_numeric_tokens(
 
     return x_train_tokens, y_train_tokens, x_test_tokens
 
+
 def prepare_dataset_prompts(
-    dataset_fns: Union[callable, List[callable]],
+    dataset_fns: Union[Callable, List[Callable]],
     n_samples: int,
     model: HookedTransformer,
+    seq_len: int = 10,  # Added parameter for data slicing
     random_seeds: List[int] = None
 ) -> List[Tuple[torch.Tensor, pd.DataFrame, str]]:
     """Prepare multiple dataset samples with their corresponding tokenized prompts.
@@ -345,6 +348,7 @@ def prepare_dataset_prompts(
                     datasets (e.g. get_dataset_friedman_1)
         n_samples: Number of dataset samples to generate per dataset function
         model: The language model with tokenizer
+        seq_len: Number of examples to include in each prompt. Defaults to 10.
         random_seeds: List of random seeds for dataset generation. If None,
                      uses range(n_samples)
 
@@ -379,6 +383,11 @@ def prepare_dataset_prompts(
             # Generate dataset
             x_train, y_train, x_test, y_test = dataset_fn(random_state=seed)
 
+            # Slice the dataset
+            x_train, y_train, x_test, y_test = slice_dataset(
+                x_train, y_train, x_test, y_test, n=seq_len
+            )
+
             # Store samples
             x_train_samples[idx] = x_train
             y_train_samples[idx] = y_train
@@ -412,6 +421,7 @@ def prepare_dataset_prompts(
         )
 
     return prompts_and_data
+
 
 def create_regressor_results(
     dataset: Union[Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series],
@@ -477,3 +487,48 @@ def create_regressor_results(
         return results[0]
 
     return results
+
+
+def extract_model_prediction(
+    model: HookedTransformer,
+    prompt_tensor: torch.Tensor,
+    max_new_tokens: int = 16,
+    temperature: float = 0.0,
+    sample_id: Optional[int] = None
+) -> Optional[float]:
+    """Extract numeric prediction from model generation output.
+
+    Args:
+        model: The transformer model
+        prompt_tensor: Input prompt as tensor
+        max_new_tokens: Maximum number of tokens to generate. Defaults to 16.
+        temperature: Sampling temperature. Defaults to 0.0.
+        sample_id: Optional sample identifier for warning messages.
+                  Defaults to None.
+
+    Returns:
+        Optional[float]: Extracted numeric prediction or None if extraction fails
+    """
+    # Generate prediction
+    pred_text = str(model.generate(
+        prompt_tensor,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        return_type="str",
+        prepend_bos=False
+    ))
+
+    # Extract the numeric prediction
+    try:
+        # Clean the prediction text
+        generated_part = pred_text.split("Output: ")[-1].strip()
+        pattern = r"[+-]?(?:\d*\.)?\d+"
+        match = re.search(pattern, generated_part)
+        if match:
+            end_pos = match.end()
+            generated_part = generated_part[:end_pos]
+        return float(generated_part)
+    except (ValueError, IndexError):
+        sample_info = f" for sample {sample_id}" if sample_id is not None else ""
+        print(f"Warning: Could not parse model prediction{sample_info}")
+        return None
