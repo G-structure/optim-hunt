@@ -5,7 +5,7 @@ preparation,
 and tokenization for language model interactions.
 """
 
-from typing import Dict, Hashable, List, Tuple, Union, cast
+from typing import Dict, Hashable, List, Tuple, Union, cast, callable
 
 import numpy as np
 import numpy.typing as npt
@@ -331,3 +331,84 @@ def pad_numeric_tokens(
         )
 
     return x_train_tokens, y_train_tokens, x_test_tokens
+
+def prepare_dataset_prompts(
+    dataset_fns: Union[callable, List[callable]],
+    n_samples: int,
+    model: HookedTransformer,
+    random_seeds: List[int] = None
+) -> List[Tuple[torch.Tensor, pd.DataFrame, str]]:
+    """Prepare multiple dataset samples with their corresponding tokenized prompts.
+
+    Args:
+        dataset_fns: Single dataset function or list of functions that generate
+                    datasets (e.g. get_dataset_friedman_1)
+        n_samples: Number of dataset samples to generate per dataset function
+        model: The language model with tokenizer
+        random_seeds: List of random seeds for dataset generation. If None,
+                     uses range(n_samples)
+
+    Returns:
+        List[Tuple[torch.Tensor, pd.DataFrame, str]]: List of tuples containing:
+            - tokenized prompt tensor
+            - test features dataframe
+            - dataset function name
+    """
+    # Input validation and setup
+    if random_seeds is None:
+        random_seeds = range(n_samples)
+    elif len(random_seeds) < n_samples:
+        raise ValueError("Not enough random seeds provided for requested samples")
+
+    dataset_fns = [dataset_fns] if not isinstance(dataset_fns, list) else dataset_fns
+    total_samples = len(dataset_fns) * n_samples
+
+    # Pre-allocate lists with known sizes
+    x_train_samples = [None] * total_samples
+    y_train_samples = [None] * total_samples
+    x_test_samples = [None] * total_samples
+    dataset_names = [None] * total_samples
+
+    # Generate all samples
+    for i, dataset_fn in enumerate(dataset_fns):
+        fn_name = dataset_fn.__name__
+        base_idx = i * n_samples
+
+        for j, seed in enumerate(random_seeds[:n_samples]):
+            idx = base_idx + j
+            # Generate dataset
+            x_train, y_train, x_test, y_test = dataset_fn(random_state=seed)
+
+            # Store samples
+            x_train_samples[idx] = x_train
+            y_train_samples[idx] = y_train
+            x_test_samples[idx] = x_test
+            dataset_names[idx] = fn_name
+
+    # Pad all numeric tokens together
+    x_train_tokens, y_train_tokens, x_test_tokens = pad_numeric_tokens(
+        model=model,
+        x_train=x_train_samples,
+        y_train=y_train_samples,
+        x_test=x_test_samples
+    )
+
+    # Pre-allocate result list
+    prompts_and_data = [None] * total_samples
+
+    # Create prompts for each padded sample
+    for idx in range(total_samples):
+        prompt_tensor = prepare_prompt_from_tokens(
+            model=model,
+            x_train_tokens=x_train_tokens[idx],
+            y_train_tokens=y_train_tokens[idx],
+            x_test_tokens=x_test_tokens[idx]
+        )
+
+        prompts_and_data[idx] = (
+            prompt_tensor,
+            x_test_samples[idx],
+            dataset_names[idx]
+        )
+
+    return prompts_and_data
