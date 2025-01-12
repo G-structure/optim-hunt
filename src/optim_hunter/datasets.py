@@ -169,3 +169,36 @@ def get_dataset_friedman_3(
     y_test = pd.Series(cast(pd.Series, y_test.iloc[:1]))
 
     return x_train, y_train, x_test, y_test
+
+def get_original2(random_state=1, max_train=64, max_test=32, noise_level=0.0, **kwargs):
+    """
+    Adapted from Friedman 2
+    """
+    generator = np.random.RandomState(random_state)
+
+    n_samples = max_train + max_test
+
+    x = generator.uniform(size=(n_samples, 4))
+    x[:, 0] *= 3
+    x[:, 1] *= 52 * np.pi
+    x[:, 1] += 4 * np.pi
+    x[:, 2] *= 2
+    x[:, 3] *= 10
+    x[:, 3] += 1
+
+    if kwargs.get('round', False):
+        round_value = kwargs.get('round_value', 2)
+        x = np.round(x, round_value)
+        y_fn = lambda x: np.round((x[0] ** 4 + (x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))) ** 2) ** 0.75, round_value)
+    else:
+        y_fn = lambda x: (x[0] ** 4 + (x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))) ** 2) ** 0.75
+
+
+    y = np.array([y_fn(point) for point in x]) + noise_level * generator.standard_normal(size=(n_samples))
+
+    r_data   = x
+    r_values = y
+
+    df = pd.DataFrame({**{f'Feature {i}': r_data[:, i] for i in range(r_data.shape[1])}, 'Output': r_values})
+    x = df.drop(['Output'], axis=1)
+    y = df['Output']
