@@ -170,9 +170,39 @@ def get_dataset_friedman_3(
 
     return x_train, y_train, x_test, y_test
 
-def get_original2(random_state=1, max_train=64, max_test=32, noise_level=0.0, **kwargs):
-    """
-    Adapted from Friedman 2
+def get_original2(
+    random_state: int = 1,
+    max_train: int = 64,
+    max_test: int = 32,
+    noise_level: float = 0.0,
+    **kwargs
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Generate and return an adapted version of the Friedman #2 dataset.
+
+    This function creates a modified version of the Friedman #2 dataset with
+    customizable parameters. The dataset can be split into training and testing
+    sets with configurable sizes, and optional noise can be added to the output
+    values. The features and outputs can also be optionally rounded to a
+    specified number of decimal places.
+
+    Args:
+        random_state (int): Controls the randomness of the dataset generation.
+                          Default is 1.
+        max_train (int): Maximum number of training samples. Default is 64.
+        max_test (int): Maximum number of test samples. Default is 32.
+        noise_level (float): Level of Gaussian noise to add to outputs.
+                          Default is 0.0.
+        **kwargs: Additional keyword arguments:
+            round (bool): Whether to round values
+            round_value (int): Number of decimal places to round to
+
+    Returns:
+        tuple: A tuple containing four elements:
+            - x_train (pd.DataFrame): Training features
+            - y_train (pd.Series): Training labels
+            - x_test (pd.DataFrame): Testing features
+            - y_test (pd.Series): Testing labels
+
     """
     generator = np.random.RandomState(random_state)
 
@@ -189,16 +219,33 @@ def get_original2(random_state=1, max_train=64, max_test=32, noise_level=0.0, **
     if kwargs.get('round', False):
         round_value = kwargs.get('round_value', 2)
         x = np.round(x, round_value)
-        y_fn = lambda x: np.round((x[0] ** 4 + (x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))) ** 2) ** 0.75, round_value)
+
+        def y_fn(x):
+            expr1 = x[0] ** 4
+            expr2 = x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))
+            return np.round((expr1 + expr2 ** 2) ** 0.75, round_value)
     else:
-        y_fn = lambda x: (x[0] ** 4 + (x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))) ** 2) ** 0.75
+        def y_fn(x):
+            expr1 = x[0] ** 4
+            expr2 = x[1] * x[2] - 2 / (np.sqrt(x[1]) * np.sqrt(x[3]))
+            return (expr1 + expr2 ** 2) ** 0.75
 
+    y = np.array([y_fn(point) for point in x]) + (
+        noise_level * generator.standard_normal(size=(n_samples))
+    )
 
-    y = np.array([y_fn(point) for point in x]) + noise_level * generator.standard_normal(size=(n_samples))
-
-    r_data   = x
+    r_data = x
     r_values = y
 
-    df = pd.DataFrame({**{f'Feature {i}': r_data[:, i] for i in range(r_data.shape[1])}, 'Output': r_values})
+    features = {f'Feature {i}': r_data[:, i] for i in range(r_data.shape[1])}
+    df = pd.DataFrame({**features, 'Output': r_values})
     x = df.drop(['Output'], axis=1)
     y = df['Output']
+
+    # Split into train and test sets
+    x_train = pd.DataFrame(x.iloc[:max_train])
+    y_train = pd.Series(y.iloc[:max_train])
+    x_test = pd.DataFrame(x.iloc[max_train:])
+    y_test = pd.Series(y.iloc[max_train:])
+
+    return x_train, y_train, x_test, y_test
