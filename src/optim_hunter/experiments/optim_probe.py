@@ -1,20 +1,22 @@
+from dataclasses import dataclass
+from typing import Dict, List
+
+import pandas as pd
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple
-from dataclasses import dataclass
 from transformer_lens import HookedTransformer
-import pandas as pd
+
 
 @dataclass
 class OptimizerProbeOutput:
-    """Structured output from the optimizer probe"""
+    """Structured output from the optimizer probe."""
+
     gradient: torch.Tensor  # Predicted gradient
 
 
 class OptimizerProbe(nn.Module):
-    """
-    Neural probe that predicts optimization steps given model residual stream
-    """
+    """Neural probe predicting optimization steps from model residual stream."""
+
     def __init__(
         self,
         residual_stream_dim: int,
@@ -22,6 +24,7 @@ class OptimizerProbe(nn.Module):
         hidden_dim: int = 256,
         num_layers: int = 2
     ):
+        """Initialize the optimizer probe with dimensions and architecture."""
         super().__init__()
 
         # Input dimensions
@@ -52,16 +55,16 @@ class OptimizerProbe(nn.Module):
         residual_stream: torch.Tensor,  # Shape: [batch_size, residual_dim]
         learning_rate: torch.Tensor,    # Shape: [batch_size, 1]
     ) -> OptimizerProbeOutput:
-        """
-        Predict optimization step given residual stream and learning rate
-        """
+        """Predict optimization step given residual stream and learning rate."""
         # Ensure residual stream has correct shape
         if residual_stream.dim() == 1:
-            residual_stream = residual_stream.unsqueeze(0)  # Add batch dimension if needed
+            # Add batch dimension if needed
+            residual_stream = residual_stream.unsqueeze(0)
 
         # Ensure learning rate has correct shape
         if learning_rate.dim() == 1:
-            learning_rate = learning_rate.unsqueeze(0)  # Add batch dimension if needed
+            # Add batch dimension if needed
+            learning_rate = learning_rate.unsqueeze(0)
 
         # Ensure both tensors have same batch dimension
         batch_size = residual_stream.shape[0]
@@ -69,7 +72,8 @@ class OptimizerProbe(nn.Module):
             learning_rate = learning_rate.expand(batch_size, -1)
 
         # Concatenate residual and learning rate
-        probe_input = torch.cat([residual_stream, learning_rate], dim=-1)  # Use dim=-1 for last dimension
+        # Use dim=-1 for last dimension
+        probe_input = torch.cat([residual_stream, learning_rate], dim=-1)
 
         # Get probe predictions
         predicted_gradients = self.network(probe_input)
@@ -87,9 +91,7 @@ def train_optimizer_probe(
     learning_rate: float = 1e-4,
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 ) -> List[Dict[str, float]]:
-    """
-    Train the optimizer probe
-    """
+    """Train the optimizer probe."""
     probe = probe.to(device)
     optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
     metrics_history = []
@@ -101,7 +103,9 @@ def train_optimizer_probe(
         # Generate batch of examples
         for batch_idx in range(batch_size):
             # Get fresh dataset with different random seed
-            x_train, y_train, x_test, y_test = dataset_fn(random_state=epoch*batch_size + batch_idx)
+            x_train, y_train, x_test, y_test = dataset_fn(
+                random_state=epoch*batch_size + batch_idx
+            )
 
             # First calculate target gradients before moving data to device
             target_output = calculate_sgd_gradients(
@@ -132,11 +136,13 @@ def train_optimizer_probe(
                         residual_layers.append(cache[key].detach())
 
                 # Stack and process residual streams
-                residual_stream = torch.stack(residual_layers, dim=1)  # [batch, layer, pos, d_model]
-                residual_stream = residual_stream.mean(dim=[1, 2])  # Average across layers and positions
+                # [batch, layer, pos, d_model]
+                residual_stream = torch.stack(residual_layers, dim=1)
+                # Average across layers and positions
+                residual_stream = residual_stream.mean(dim=[1, 2])
 
-            # Sample random learning rate and ensure it's on the correct device
-            lr_tensor = torch.rand(1, 1, device=device) * 0.1  # Random learning rate between 0 and 0.1
+            # Sample random learning rate between 0 and 0.1
+            lr_tensor = torch.rand(1, 1, device=device) * 0.1
 
             # Get probe predictions
             probe_output = probe(
@@ -148,7 +154,9 @@ def train_optimizer_probe(
             loss = nn.MSELoss()(probe_output.gradient, target_gradients)
 
             # Compute gradient cosine similarity
-            cos_sim = nn.CosineSimilarity(dim=0)(probe_output.gradient, target_gradients)
+            cos_sim = nn.CosineSimilarity(dim=0)(
+                probe_output.gradient, target_gradients
+            )
 
             # Update probe
             optimizer.zero_grad()
@@ -172,7 +180,13 @@ def train_optimizer_probe(
 
     return metrics_history
 
-def calculate_sgd_gradients(x_train, y_train, x_test, y_test, learning_rates=[0.001, 0.01, 0.1, 1.0]):
+def calculate_sgd_gradients(
+    x_train,
+    y_train,
+    x_test,
+    y_test,
+    learning_rates=[0.001, 0.01, 0.1, 1.0]
+):
     """Calculate gradients after one step of SGD for multiple learning rates."""
     # Convert pandas to numpy then to torch tensors
     if isinstance(x_train, pd.DataFrame):

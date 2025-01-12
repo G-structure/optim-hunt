@@ -1,38 +1,25 @@
-import sys
-import torch as t
-from torch import Tensor
-import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
-import numpy as np
-import einops
-from jaxtyping import Int, Float
-import functools
-from tqdm import tqdm
-from IPython.display import display
-from transformer_lens.hook_points import HookPoint
-from transformer_lens import (
-    utils,
-    HookedTransformer,
-    HookedTransformerConfig,
-    FactoredMatrix,
-    ActivationCache,
-)
-import circuitsvis as cv
-
-from optim_hunter.plotly_utils import imshow, hist, plot_comp_scores, plot_logit_attribution, plot_loss_difference, line
-from optim_hunter.utils import prepare_prompt, slice_dataset, prepare_dataset_prompts
-from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random
-from optim_hunter.datasets import get_dataset_friedman_2
-from optim_hunter.data_model import create_comparison_data
-from optim_hunter.plot_html import get_theme_sync_js, create_line_plot, with_identifier, create_multi_line_plot, create_multi_line_plot_layer_names
-from optim_hunter.llama_model import load_llama_model
-from optim_hunter.model_utils import run_and_cache_model_linreg_tokens_batched, run_and_cache_model_linreg_tokens
-from typing import List, Tuple, Callable, Dict,Union, Optional
-import pandas as pd
-
+"""Module for analyzing and plotting logit differences of transformer layers."""
 import logging
+from typing import Callable, List, Optional
+
+import einops
+import torch as t
+from jaxtyping import Float
+from torch import Tensor
+from transformer_lens import (
+    ActivationCache,
+    HookedTransformer,
+)
+
+from optim_hunter.data_model import create_comparison_data
 from optim_hunter.logging_config import setup_logging
+from optim_hunter.plot_html import (
+    create_multi_line_plot_layer_names,
+    with_identifier,
+)
+from optim_hunter.utils import (
+    prepare_dataset_prompts,
+)
 
 # Set up logging
 setup_logging("DEBUG")
@@ -40,7 +27,7 @@ setup_logging("DEBUG")
 # Create logger for this module
 logger = logging.getLogger(__name__)
 
-# Saves computation time, since we don't need it for the contents of this notebook
+# Saves computation time, since we don't need it
 t.set_grad_enabled(False)
 
 #device = t.device("cuda:0,1" if t.cuda.is_available() else "cpu")
@@ -57,17 +44,18 @@ def generate_logit_diff_batched(
     model: HookedTransformer,
     random_seeds: Optional[List[int]] = None
 ) -> str:
-    """Generate logit difference analysis across batches without storing activations."""
+    """Generate logit difference across batches with no activations stored."""
     # Generate all prompts and datasets upfront
     prompts_and_data = prepare_dataset_prompts(
         dataset_fns=dataset,
         n_samples=batches,
         model=model,
         seq_len=seq_len,
-        random_seeds=random_seeds if random_seeds is not None else list(range(batches))
+        random_seeds = random_seeds if random_seeds is not None \
+            else list(range(batches))
     )
 
-    # Get comparison names and token pairs from first batch to verify consistency
+    # Get comparison names & token pairs from first batch to verify consistency
     dataset_tuple = dataset(random_state=0)
     first_comparison = create_comparison_data(
         model, dataset, regressors, random_state=0, seq_len=seq_len
@@ -85,7 +73,8 @@ def generate_logit_diff_batched(
     labels = None
 
     # Process each prompt
-    for batch_idx, (prompt_tensor, x_test, dataset_name) in enumerate(prompts_and_data):
+    for batch_idx, (prompt_tensor, x_test, dataset_name) in \
+        enumerate(prompts_and_data):
         logger.info(f"Processing batch {batch_idx}")
 
         # Ensure prompt tensor is on correct device
@@ -109,9 +98,13 @@ def generate_logit_diff_batched(
             token_pair = token_pair.to("cuda:1")
 
             # Compute residual directions
-            pair_residual_directions = model.tokens_to_residual_directions(token_pair)
-            correct_residual_directions, incorrect_residual_directions = pair_residual_directions.unbind(dim=1)
-            logit_diff_directions = correct_residual_directions - incorrect_residual_directions
+            pair_residual_directions = (
+                model.tokens_to_residual_directions(token_pair))
+            correct_residual_directions, incorrect_residual_directions = \
+                pair_residual_directions.unbind(dim=1)
+            logit_diff_directions = (
+                correct_residual_directions - incorrect_residual_directions
+            )
 
             # Move logit diff directions to cuda:1
             logit_diff_directions = logit_diff_directions.to('cuda')
@@ -171,9 +164,9 @@ def generate_logit_diff_batched(
     return plots
 
 def residual_stack_to_logit_diff(
-    residual_stack: Float[Tensor, "... batch d_model"],
+    residual_stack: Float[Tensor, "... batch d_model"],  # noqa: F722
     cache: ActivationCache,
-    logit_diff_directions: Float[Tensor, "batch d_model"],
+    logit_diff_directions: Float[Tensor, "batch d_model"],  # noqa: F722
 ) -> Float[Tensor, "..."]:
     """Calculate logit differences from residual stack."""
     scaled_residual_stream = cache.apply_ln_to_stack(

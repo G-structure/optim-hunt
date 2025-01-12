@@ -1,7 +1,8 @@
-"""This module provides utilities for analyzing MLP layer activations
-in transformer models.
-"""  # noqa: D404
+"""Utilities for analyzing MLP layer activations within transformer models."""
 
+from typing import Any, Callable, Dict, List, Sequence, Tuple
+
+import torch
 from transformer_lens import (
     HookedTransformer,
 )
@@ -9,9 +10,6 @@ from transformer_lens.hook_points import HookPoint
 
 from optim_hunter.plot_html import create_heatmap_plot
 
-import torch
-
-from typing import Dict, List, Tuple, Callable, Sequence, Any
 
 def analyze_mlp_for_specific_tokens(
     model: HookedTransformer,

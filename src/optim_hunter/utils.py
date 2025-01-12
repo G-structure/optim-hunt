@@ -197,8 +197,7 @@ def slice_dataset(
     y_test: pd.Series,
     n: int = 10
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
-    """Slice the first n items from each dataset while preserving DataFrame
-structure.
+    """Slice the first n items from each dataset while preserving DataFrame.
 
     Args:
         x_train (pd.DataFrame): Training features
@@ -341,7 +340,7 @@ def prepare_dataset_prompts(
     seq_len: int = 10,  # Added parameter for data slicing
     random_seeds: List[int] = None
 ) -> List[Tuple[torch.Tensor, pd.DataFrame, str]]:
-    """Prepare multiple dataset samples with their corresponding tokenized prompts.
+    """Prepare multiple dataset samples with corresponding tokenized prompts.
 
     Args:
         dataset_fns: Single dataset function or list of functions that generate
@@ -357,14 +356,19 @@ def prepare_dataset_prompts(
             - tokenized prompt tensor
             - test features dataframe
             - dataset function name
+
     """
     # Input validation and setup
     if random_seeds is None:
         random_seeds = range(n_samples)
     elif len(random_seeds) < n_samples:
-        raise ValueError("Not enough random seeds provided for requested samples")
+        raise ValueError(
+            "Not enough random seeds provided for requested samples"
+        )
 
-    dataset_fns = [dataset_fns] if not isinstance(dataset_fns, list) else dataset_fns
+    dataset_fns = (
+        [dataset_fns] if not isinstance(dataset_fns, list) else dataset_fns
+    )
     total_samples = len(dataset_fns) * n_samples
 
     # Pre-allocate lists with known sizes
@@ -438,13 +442,17 @@ def create_regressor_results(
         random_state: Random seed for reproducibility. Defaults to 1.
 
     Returns:
-        Union[Tuple[pd.DataFrame, pd.DataFrame], List[Tuple[pd.DataFrame, pd.DataFrame]]]:
+        Union[
+            Tuple[pd.DataFrame, pd.DataFrame],
+            List[Tuple[pd.DataFrame, pd.DataFrame]]
+        ]:
             For single dataset:
                 Tuple containing:
                 - DataFrame with predictions and true values
                 - DataFrame with MSE for each regressor
             For multiple datasets:
                 List of such tuples
+
     """
     # Handle single dataset case
     is_single = not isinstance(dataset, list)
@@ -507,7 +515,9 @@ def extract_model_prediction(
                   Defaults to None.
 
     Returns:
-        Optional[float]: Extracted numeric prediction or None if extraction fails
+        Optional[float]: Extracted numeric prediction or None if extraction
+        fails
+
     """
     # Generate prediction
     pred_text = str(model.generate(
@@ -529,6 +539,8 @@ def extract_model_prediction(
             generated_part = generated_part[:end_pos]
         return float(generated_part)
     except (ValueError, IndexError):
-        sample_info = f" for sample {sample_id}" if sample_id is not None else ""
+        sample_info = (
+            f" for sample {sample_id}" if sample_id is not None else ""
+        )
         print(f"Warning: Could not parse model prediction{sample_info}")
         return None

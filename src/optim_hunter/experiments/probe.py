@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch as t
 from torch import nn, optim
@@ -17,6 +17,15 @@ class GradientProbeMLP(nn.Module):
 
     def __init__(self, d_model: int, d_hidden: int = 128, n_layers: int = 2,
                  dropout: float = 0.1):
+        """Initialize the gradient probe MLP.
+
+        Args:
+            d_model: Dimension of the input model embeddings
+            d_hidden: Dimension of hidden layers
+            n_layers: Number of hidden layers
+            dropout: Dropout probability
+
+        """
         super().__init__()
 
         self.input_layer = nn.Linear(d_model + 1, d_hidden)
@@ -29,6 +38,16 @@ class GradientProbeMLP(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, residual: t.Tensor, learning_rate: t.Tensor) -> t.Tensor:
+        """Forward pass of the MLP.
+
+        Args:
+            residual: The residual stream tensor
+            learning_rate: The learning rate tensor
+
+        Returns:
+            The predicted gradient updates
+
+        """
         x = t.cat([residual, learning_rate], dim=-1)
         x = self.activation(self.input_layer(x))
         x = self.dropout(x)
@@ -43,13 +62,17 @@ class ResidualCollector:
     """Collects residual streams from transformer layers."""
 
     def __init__(self):
+        """Initialize ResidualCollector.
+
+        Creates an empty dictionary to store residual streams.
+        """
         self.residuals = {}
 
     def hook_fn(self, value: t.Tensor, hook: HookPoint):
         """Store residual stream from hook."""
         self.residuals[hook.name] = value.detach()[:, -1, :]
 
-    def get_hooks(self, model: HookedTransformer) -> List[Tuple[str, callable]]:
+    def get_hooks(self, model: HookedTransformer) -> List[Tuple[str, Callable]]:
         """Get all hooks needed for collection."""
         hooks = [('hook_embed', self.hook_fn)]
         for layer_idx in range(model.cfg.n_layers):
@@ -134,7 +157,8 @@ def train_probe_online(
         ).unsqueeze(1)
 
         # Train on collected residuals
-        for layer_idx, (hook_name, residual) in enumerate(collector.residuals.items()):
+        for layer_idx, (hook_name, residual) in \
+                enumerate(collector.residuals.items()):
             # Prepare inputs for probe
             residual = residual.to(device)
             residual_expanded = residual.repeat(len(learning_rates), 1)
@@ -196,7 +220,8 @@ def evaluate_probe_online(
     with t.no_grad():
         for seed in tqdm(range(n_samples), desc="Evaluating probe"):
             # Generate dataset
-            x_train, y_train, x_test, y_test = get_dataset_friedman_2(seed + 10000)
+            x_train, y_train, x_test, y_test = \
+                get_dataset_friedman_2(seed + 10000)
             x_train, y_train, x_test, y_test = slice_dataset(
                 x_train, y_train, x_test, y_test, seq_len
             )

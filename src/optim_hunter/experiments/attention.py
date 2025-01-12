@@ -5,19 +5,18 @@ scores including induction scores, per-example scores, and accumulated attention
 scores.
 """
 import functools
+from typing import Callable, Tuple
 
 import einops
+import pandas as pd
 import torch as t
 from jaxtyping import Float
 from tqdm import tqdm
-from transformer_lens.hook_points import HookPoint
 from transformer_lens import HookedTransformer
+from transformer_lens.hook_points import HookPoint
 
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
 from optim_hunter.plot_html import create_heatmap_plot
-
-from typing import Callable, Tuple
-import pandas as pd
 
 
 def attention(
@@ -96,8 +95,10 @@ def attention(
         output_positions: list[int],
         feature_positions: list[int]
     ) -> None:
-        """Measure accumulated attention between output positions and previous
-        positions.
+        """Measure accumulated attention between output positions and prev pos.
+
+        Calculates average attention scores for each output token against all
+        previous output and feature token positions.
 
         Args:
             pattern: Attention pattern tensor with shape

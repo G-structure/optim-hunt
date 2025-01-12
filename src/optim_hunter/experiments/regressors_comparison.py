@@ -1,10 +1,9 @@
-"""Module for generating and comparing predictions between
-machine learning models using regression.
-"""
+"""Module for comparing ML model predictions using regression."""
 
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
+import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch as t
@@ -14,9 +13,12 @@ from transformer_lens import (
 
 from optim_hunter.logging_config import setup_logging
 from optim_hunter.plot_html import create_bar_plot, with_identifier
-from optim_hunter.utils import prepare_dataset_prompts, create_regressor_results, extract_model_prediction
-import re
-import numpy as np
+from optim_hunter.utils import (
+    create_regressor_results,
+    extract_model_prediction,
+    prepare_dataset_prompts,
+)
+
 # Set up logging
 setup_logging("DEBUG")
 
@@ -31,7 +33,10 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 MAIN = __name__ == "__main__"
 
-def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+def calculate_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+) -> Dict[str, float]:
     """Calculate comprehensive set of regression metrics.
 
     Args:
@@ -40,6 +45,7 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float
 
     Returns:
         Dict containing calculated metrics
+
     """
     # Handle edge cases
     if len(y_true) == 0 or len(y_pred) == 0:
@@ -62,7 +68,12 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float
 
     # MAPE calculation (avoiding division by zero)
     non_zero_mask = y_true != 0
-    mape = np.mean(abs_errors[non_zero_mask] / np.abs(y_true[non_zero_mask])) * 100 if any(non_zero_mask) else np.inf
+    if any(non_zero_mask):
+        numerator = abs_errors[non_zero_mask]
+        denominator = np.abs(y_true[non_zero_mask])
+        mape = np.mean(numerator / denominator) * 100
+    else:
+        mape = np.inf
 
     # Bias/Variance metrics
     bias = np.mean(errors)
@@ -97,13 +108,15 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float
 
 def generate_and_compare_predictions(
     model: HookedTransformer,
-    dataset_func: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
+    dataset_func: Callable[
+        ...,
+        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
     regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
     num_samples: int = 5,
     seq_len: Optional[int] = None
 ) -> Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]:
-    """Generate model predictions and compare against regression baselines using
-    MSE across multiple prompts.
+    """Compare ML model predictions with various regression baselines.
 
     Args:
         model (HookedTransformer): The transformer model
@@ -193,7 +206,9 @@ def generate_and_compare_predictions(
         "average_mse": avg_mse_final
     }
 
-def analyze_low_mse_seeds(results: Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]) -> Tuple[List[int], str]:
+def analyze_low_mse_seeds(
+    results: Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]
+) -> Tuple[List[int], str]:
     """Analyze and plot results for seeds with low MSE (<30,000) for LLaMA-7B.
 
     Args:
@@ -201,8 +216,11 @@ def analyze_low_mse_seeds(results: Dict[str, Union[List[Dict[str, Any]], Dict[st
 
     Returns:
         Tuple of low MSE seeds list and HTML plot
+
     """
-    individual_results = cast(List[Dict[str, Any]], results["individual_results"])
+    individual_results = cast(List[Dict[str, Any]],
+        results["individual_results"]
+    )
 
     # Find seeds with low MSE
     low_mse_seeds = []
@@ -221,7 +239,9 @@ def analyze_low_mse_seeds(results: Dict[str, Union[List[Dict[str, Any]], Dict[st
     @with_identifier("low-mse-comparison")
     def create_low_mse_plot() -> str:
         # Reorganize data for plotting
-        methods = set().union(*(scores.keys() for scores in low_mse_results.values()))
+        methods = set().union(
+            *(scores.keys() for scores in low_mse_results.values())
+        )
         avg_mse = {method: [] for method in methods}
 
         for scores in low_mse_results.values():
@@ -239,17 +259,20 @@ def analyze_low_mse_seeds(results: Dict[str, Union[List[Dict[str, Any]], Dict[st
         return create_bar_plot(
             x_values=list(avg_mse_final.keys()),
             y_values=list(avg_mse_final.values()),
-            title=f"Average MSE Across Methods (Low MSE Seeds: {low_mse_seeds})",
+            title=(f"Average MSE Across Methods "
+                   f"(Low MSE Seeds: {low_mse_seeds})"),
             x_label="Method",
             y_label="Mean Squared Error",
             include_plotlyjs=True,
-            include_theme_js=True,
+            include_theme_js=True
         )
 
     return low_mse_seeds, create_low_mse_plot()
 
 def compare_llm_and_regressors(
-    dataset: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
+    dataset: Callable[
+        ..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+    ],
     regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
     seq_len: Optional[int],
     batches: int,
@@ -258,7 +281,8 @@ def compare_llm_and_regressors(
     """Compare predictions between language model and regression baselines.
 
     Returns:
-        Tuple[str, str]: HTML of both the full MSE comparison plot and low MSE seeds plot
+        Tuple[str, str]: HTML of both the full MSE comparison plot and low MSE
+
     """
     results = generate_and_compare_predictions(
         model=model,
