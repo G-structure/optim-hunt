@@ -21,128 +21,155 @@
 
 ;;; === Cache Management Functions ===
 
-;; Ensures cache directory exists and creates it if needed
+;; Ensures the existence of a cache directory for storing block execution outputs
 (defn ensure-cache-dir!
-  "Creates cache directory if it doesn't exist.
+  "Manages the cache directory for storing code block execution results.
    Args:
      None
    Returns:
-     true if directory exists or was created successfully"
+     true if directory exists and is accessible, false otherwise
+   Side effects:
+     Creates cache directory if it doesn't exist
+     Prints status messages about directory creation"
   []
-  (let [dir (io/file cache-dir)]
-    (when-not (.exists dir)
+  (let [dir (io/file cache-dir)]               ; Create file object for cache directory
+    (when-not (.exists dir)                    ; Check if directory needs to be created
       (println "Creating cache directory:" cache-dir)
-      (.mkdir dir))
-    (.exists dir)))
+      (.mkdir dir))                            ; Attempt directory creation if missing
+    (.exists dir)))                            ; Return existence status
 
-;; Generates cache file path for a specific block
+;; Constructs filesystem path for code block cache files based on input file and block ID
 (defn cache-file-path
-  "Constructs path for block-specific cache file.
+  "Builds standardized filesystem path for storing code block execution results.
    Args:
-     input-file - Source markdown file path
-     block-id   - Unique identifier for code block
+     input-file - Path to source markdown file containing the code block
+     block-id   - Unique numeric identifier for the specific code block
    Returns:
-     String path to cache file"
+     String containing full path to cache file in format:
+     {cache-dir}/{input-filename}-block-{id}.edn"
   [input-file block-id]
   (let [base-name (-> input-file
-                      io/file
-                      .getName
-                      (str/replace #"\.[^.]+$" ""))]    ; Remove file extension
-    (str cache-dir
-         "/"
-         base-name
-         "-block-"
-         block-id
-         ".edn")))
+                      io/file                            ; Convert to File object
+                      .getName                           ; Extract filename
+                      (str/replace #"\.[^.]+$" ""))]     ; Strip file extension
+    (str cache-dir                                       ; Construct path:
+         "/"                                             ; 1. Start with cache dir
+         base-name                                       ; 2. Add base filename
+         "-block-"                                       ; 3. Add block identifier
+         block-id                                        ; 4. Add block ID
+         ".edn")))                                       ; 5. Add EDN extension
 
-;; Loads cached output for a specific code block
+;; Retrieves previously cached execution output for a specific code block
 (defn load-block-cache
-  "Reads cached output for a specific code block.
+  "Loads and parses cached execution output for an individual code block.
    Args:
-     input-file - Source markdown file path
-     block-id   - Unique identifier for code block
+     input-file - Path to source markdown file containing the block
+     block-id   - Unique numeric identifier for the code block
    Returns:
-     Cached output string if available, nil if no cache exists"
+     String containing cached output if available and valid,
+     nil if cache doesn't exist or can't be read.
+   Side effects:
+     Ensures cache directory exists
+     Prints status messages about cache operations"
   [input-file block-id]
   (println "\n=== Loading Block Cache ===")
-  (ensure-cache-dir!)
-  (let [cache-path (cache-file-path input-file block-id)]
+  (ensure-cache-dir!)                                     ; Make sure cache directory exists
+  (let [cache-path (cache-file-path input-file block-id)] ; Get path for this block's cache
     (println "Checking cache file:" cache-path)
-    (when (.exists (io/file cache-path))
+    (when (.exists (io/file cache-path))                  ; Only proceed if cache exists
       (try
-        (let [cached-data (read-string (slurp cache-path))]  ; Read EDN format
+        (let [cached-data (read-string (slurp cache-path))]  ; Parse EDN cache format
           (println "Found cached output for block:" block-id)
-          (:output cached-data))                            ; Extract output from cache data
-        (catch Exception e
+          (:output cached-data))                             ; Extract just the output portion
+        (catch Exception e                                   ; Handle any parsing errors
           (println "Error reading cache for block" block-id ":" (str e))
-          nil)))))
+          nil)))))                                           ; Return nil on error
 
-;; Loads all cached outputs for an input file
+;; Reads and parses cached execution outputs for all code blocks in a markdown file
 (defn load-cache
-  "Reads all cached block outputs for a given input file.
+  "Loads all cached code block execution outputs for a given markdown file.
    Args:
-     input-file - Source markdown file path
+     input-file - Path to source markdown file containing code blocks
    Returns:
-     Map of block IDs to their cached outputs"
+     Map where:
+       - Keys are block ID strings extracted from cache filenames
+       - Values are the cached execution outputs for those blocks
+     Returns empty map if no valid cache files exist"
   [input-file]
   (println "\n=== Loading Full Cache ===")
   (ensure-cache-dir!)
-  (let [cache-pattern (re-pattern (str (-> input-file
-                                          io/file
-                                          .getName
-                                          (str/replace #"\.[^.]+$" ""))
-                                      "-block-\\d+\\.edn"))
+  (let [;; Create regex pattern to match cache files for this input file
+        cache-pattern (re-pattern (str (-> input-file
+                                         io/file
+                                         .getName                           ; Get just filename
+                                         (str/replace #"\.[^.]+$" ""))      ; Remove extension
+                                     "-block-\\d+\\.edn"))                  ; Match block ID pattern
+        ;; Find all matching cache files in cache directory
         cache-files (filter #(re-matches cache-pattern (.getName %))
-                           (.listFiles (io/file cache-dir)))]
+                          (.listFiles (io/file cache-dir)))]
+    ;; Build map of block IDs to cached outputs
     (into {}
           (for [cache-file cache-files
+                ;; Extract block ID from filename and parse cached data
                 :let [block-id (second (re-find #"-block-(\d+)\.edn$" (.getName cache-file)))
                       cached-data (try
-                                  (read-string (slurp cache-file))
-                                  (catch Exception e nil))]
-                :when cached-data]
-            [block-id (:output cached-data)]))))
+                                  (read-string (slurp cache-file))          ; Parse EDN format
+                                  (catch Exception e nil))]                 ; Return nil on error
+                :when cached-data]                                          ; Skip invalid cache entries
+            [block-id (:output cached-data)]))))                            ; Map ID to output
 
-;; Saves execution output for a specific block
+;;; === Cache Writing Functions ===
+
+;; Writes execution results and metadata for a single code block to cache file
 (defn save-block-cache
-  "Persists code block output to cache file.
+  "Persists code block execution output and metadata to a cache file.
    Args:
-     input-file - Source markdown file path
-     block-id   - Unique identifier for code block
-     code       - Source code that was executed
-     output     - Execution output to cache
+     input-file - Path to source markdown file containing the code block
+     block-id   - Unique numeric identifier for the specific code block
+     code       - Source code string that was executed
+     output     - Resulting output string from code execution
    Returns:
-     nil"
+     nil, but writes cache file as side effect
+   Side effects:
+     Creates cache directory if needed
+     Writes EDN format cache file with execution data"
   [input-file block-id code output]
   (println "\n=== Saving Block Cache ===")
-  (ensure-cache-dir!)
-  (let [cache-path (cache-file-path input-file block-id)
-        cache-data {:block-id block-id                  ; Store metadata with output
-                   :code code
-                   :output output
-                   :timestamp (System/currentTimeMillis)}]
+  (ensure-cache-dir!)                                       ; Ensure cache directory exists
+  (let [cache-path (cache-file-path input-file block-id)    ; Get path for this block's cache
+        ;; Construct cache data structure with metadata
+        cache-data {:block-id block-id                  ; Store block identifier
+                   :code code                           ; Store original source code
+                   :output output                       ; Store execution output
+                   :timestamp (System/currentTimeMillis)}]  ; Add timestamp for cache invalidation
     (println "Saving cache for block" block-id "to:" cache-path)
     (try
-      (spit cache-path (pr-str cache-data))            ; Write as EDN format
-      (catch Exception e
+      (spit cache-path (pr-str cache-data))             ; Serialize and write cache data
+      (catch Exception e                                ; Handle any write errors
         (println "Error saving cache for block" block-id ":" (str e))))))
 
-;; Saves all block outputs to cache
+;;; === Cache Writing Functions ===
+
+;; Writes all computed code block outputs to their respective cache files
 (defn save-cache
-  "Persists all block outputs to cache files.
+  "Persists all code block execution outputs to their individual cache files.
    Args:
-     input-file - Source markdown file path
-     cache-map  - Map of block IDs to execution outputs
-     blocks     - Sequence of code block definitions
+     input-file - Path to source markdown file containing the blocks
+     cache-map  - Map where keys are block IDs and values are execution outputs
+     blocks     - Sequence of maps containing parsed code block definitions:
+                 :id - Block identifier
+                 :code - Source code for the block
    Returns:
-     nil"
+     nil
+   Side effects:
+     Creates/updates cache files for each block that has output"
   [input-file cache-map blocks]
   (println "\n=== Saving Full Cache ===")
-  (doseq [block blocks
-          :let [block-id (:id block)
-                output (get cache-map block-id)]
-          :when output]
-    (save-block-cache input-file block-id (:code block) output)))
+  (doseq [block blocks                                  ; Iterate through all code blocks
+          :let [block-id (:id block)                    ; Extract block ID
+                output (get cache-map block-id)]        ; Get cached output for this block
+          :when output]                                 ; Only process blocks with output
+    (save-block-cache input-file block-id (:code block) output)))  ; Write to individual cache file
 
 ;;; === Code Block Processing ===
 
