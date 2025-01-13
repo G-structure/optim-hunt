@@ -92,31 +92,27 @@
      input-file - Path to source markdown file containing code blocks
    Returns:
      Map where:
-       - Keys are block ID strings extracted from cache filenames
-       - Values are the cached execution outputs for those blocks
-     Returns empty map if no valid cache files exist"
+       - Keys are block ID strings
+       - Values are maps containing :code and :output"
   [input-file]
   (println "\n=== Loading Full Cache ===")
   (ensure-cache-dir!)
-  (let [;; Create regex pattern to match cache files for this input file
-        cache-pattern (re-pattern (str (-> input-file
+  (let [cache-pattern (re-pattern (str (-> input-file
                                          io/file
-                                         .getName                           ; Get just filename
-                                         (str/replace #"\.[^.]+$" ""))      ; Remove extension
-                                     "-block-\\d+\\.edn"))                  ; Match block ID pattern
-        ;; Find all matching cache files in cache directory
+                                         .getName
+                                         (str/replace #"\.[^.]+$" ""))
+                                     "-block-\\d+\\.edn"))
         cache-files (filter #(re-matches cache-pattern (.getName %))
                           (.listFiles (io/file cache-dir)))]
-    ;; Build map of block IDs to cached outputs
+    (println "Found" (count cache-files) "cache files")
     (into {}
           (for [cache-file cache-files
-                ;; Extract block ID from filename and parse cached data
                 :let [block-id (second (re-find #"-block-(\d+)\.edn$" (.getName cache-file)))
                       cached-data (try
-                                  (read-string (slurp cache-file))          ; Parse EDN format
-                                  (catch Exception e nil))]                 ; Return nil on error
-                :when cached-data]                                          ; Skip invalid cache entries
-            [block-id (:output cached-data)]))))                            ; Map ID to output
+                                  (read-string (slurp cache-file))
+                                  (catch Exception e nil))]
+                :when cached-data]
+            [block-id cached-data]))))  ; Store the full cache data, not just output                            ; Map ID to output
 
 ;;; === Cache Writing Functions ===
 
@@ -366,32 +362,55 @@
 
 ;;; === Main Processing Functions ===
 
+;; Add this helper function to compare code blocks with cache
+(defn should-compute-block?
+  "Determines if a code block should be computed based on cache and flags.
+   Args:
+     block      - Code block map containing :id and :code
+     cache-data - Full cached data for the block (if any)
+     compute-id - Optional ID of block to compute
+     recompute? - Flag to force recomputation
+   Returns:
+     true if block should be computed, false if cache should be used"
+  [block cache-data compute-id recompute?]
+  (let [block-id (:id block)]
+    (do
+      (println "Checking block" block-id)
+      (println "Cache data present:" (boolean cache-data))
+      (println "Code matches:" (= (:code cache-data) (:code block)))
+      (or recompute?                                    ; Recompute if forced
+          (= block-id compute-id)                       ; Recompute if specifically requested
+          (not cache-data)                              ; Compute if no cache exists
+          (not= (:code cache-data) (:code block))))))   ; Compute if code changed
+
 ;; Manages the execution of Python code blocks and their output integration
 (defn execute-blocks
-  "Executes Python code blocks and integrates their outputs into content.
-   Args:
-     input-file  - Source markdown file path
-     content     - String containing executable code blocks
-     compute-id  - Optional ID of specific block to execute (nil executes all)
-   Returns:
-     Content string with executed code blocks and their outputs integrated"
-  [input-file content compute-id]
+  [input-file content compute-id recompute?]
   (println "\n=== Executing Blocks ===")
   (when compute-id
     (println "Computing only block with ID:" compute-id))
+  (when recompute?
+    (println "Forcing recomputation of all blocks"))
 
-  (let [cache (atom (load-cache input-file))          ; Pass input-file to load-cache
+  (let [existing-cache (load-cache input-file)
+        cache (atom {})
         blocks (find-code-blocks content)]
 
-    ;; Execute and cache each block's output
     (doseq [block blocks]
       (println "\nProcessing block" (:id block))
-      (when (or (nil? compute-id)
-                (= (:id block) compute-id))
-        (let [output (run-python (:code block))
-              processed (process-output output (:output-type block))]
-          (save-block-cache input-file (:id block) (:code block) processed)  ; Save individual block
-          (swap! cache assoc (:id block) processed))))
+      (let [cached-data (get existing-cache (:id block))
+            needs-compute? (should-compute-block? block cached-data compute-id recompute?)]
+
+        (if needs-compute?
+          (do
+            (println "Computing block" (:id block))
+            (let [output (run-python (:code block))
+                  processed (process-output output (:output-type block))]
+              (save-block-cache input-file (:id block) (:code block) processed)
+              (swap! cache assoc (:id block) processed)))
+          (do
+            (println "Using cached output for block" (:id block))
+            (swap! cache assoc (:id block) (:output cached-data))))))
 
     ;; Integrate code and outputs into content
     (let [final-content (reduce (fn [content block]
@@ -469,63 +488,120 @@
 
 ;;; === Entry Point ===
 
-;; Primary entry point function that orchestrates the site generation process
-(defn -main
-  "Processes input markdown file and generates HTML output with optional code execution.
+;; Processes and validates command line arguments, displaying help if needed
+(defn parse-cli-args
+  "Parses command line arguments into a configuration map for site generation.
    Args:
-     & args - Command line arguments:
-             input-file - Required path to markdown input file
-             --compute block-id - Optional ID of single code block to execute
-             -o/--output path - Optional output file path (defaults to index.html)
+     args - Sequence of command line arguments:
+            First arg must be input file path
+            Remaining args can be option flags with values:
+              -c, --compute <id>  : Compute specific block
+              -re, --recompute   : Force recomputation of all blocks
+              -o, --output <file>: Override default output path
    Returns:
-     nil, but writes generated HTML to output file and prints status messages"
-  [& args]
-  (println "\n=== Starting Site Generation ===")
+     Map containing parsed configuration:
+       :input-file  - Path to input markdown file
+       :output-file - Path to output HTML file
+       :compute-id  - Optional ID of block to compute
+       :recompute?  - Flag to force recomputation
+   Side effects:
+     Prints help text and exits if args are invalid"
+  [args]
   (when (empty? args)
     (println "Error: Input file required")
-    (println "Usage: ./site-gen.bb <input-file> [--compute <block-id>] [-o|--output <output-file>]")
+    (println "Usage: ./site-gen.bb <input-file> [options]")
+    (println "Options:")
+    (println "  -c, --compute <id>    Compute specific block ID")
+    (println "  -re, --recompute      Force recomputation of all blocks")
+    (println "  -o, --output <file>   Specify output file (default: index.html)")
     (System/exit 1))
 
-  (let [input-file (first args)                         ; Get input file path from first arg
-        arg-pairs (partition 2 (rest args))             ; Group remaining args into flag/value pairs
-        ;; Extract compute-id for single block execution
-        compute-id (second (first (filter #(= "--compute" (first %)) arg-pairs)))
-        ;; Get output path or use default
-        output-path (or (second (first (filter #(or (= "-o" (first %))
-                                                   (= "--output" (first %)))
-                                             arg-pairs)))
-                       output-file)
-        _ (println "Reading content file:" input-file)
-        _ (println "Output will be written to:" output-path)
+  (let [;; Extract required input file from first argument
+        input-file (first args)
+        ;; Group remaining args into pairs, padding last pair if needed
+        arg-pairs (partition 2 2 nil (rest args))
 
-        ;; Load and validate input file
-        raw-md (try
-                (slurp input-file)                      ; Attempt to read input file
-                (catch java.io.FileNotFoundException e
-                  (println "Error: Input file" input-file "not found")
-                  (System/exit 1)))                      ; Exit if file not found
-        _ (println "Raw content length:" (count raw-md))
+        ;; Find compute block ID from -c/--compute flag if present
+        compute-id (some #(when (or (= "--compute" (first %))
+                                   (= "-c" (first %)))
+                           (second %))
+                        arg-pairs)
 
-        ;; Extract metadata and content
-        {:keys [metadata content]} (parse-frontmatter raw-md)
-        _ (println "Content after frontmatter length:" (count content))
+        ;; Extract custom output path from -o/--output flag
+        output-file (some #(when (or (= "--output" (first %))
+                                    (= "-o" (first %)))
+                           (second %))
+                         arg-pairs)
 
-        ;; Process content through transformation pipeline:
-        ;; 1. Execute Python code blocks
-        executed-content (execute-blocks input-file content compute-id)
-        ;; 2. Convert markdown elements to HTML
-        processed-content (-> executed-content
-                            process-code-blocks         ; Handle code syntax highlighting
-                            process-sidenotes           ; Process special sidenote syntax
-                            markdown->html)             ; Convert remaining markdown to HTML
+        ;; Check for recompute flag presence
+        recompute? (some #(or (= "--recompute" (first %))
+                             (= "-re" (first %)))
+                        arg-pairs)]
 
-        ;; Generate final HTML document
-        template (slurp template-file)                  ; Load HTML template
-        final-html (replace-placeholders template metadata processed-content)]
+    ;; Return parsed configuration map
+    {:input-file input-file
+     :output-file (or output-file output-file)  ; Use provided output path or default
+     :compute-id compute-id                     ; Block ID to compute (if any)
+     :recompute? recompute?}))                  ; Whether to force recomputation
 
-    (println "\n=== Writing Output ===")
-    (spit output-path final-html)                       ; Write generated HTML to output file
-    (println "Generated" output-path)))
+;;; === Main Entry Point and Site Generation ===
+
+;; Main orchestration function that coordinates the entire site generation process:
+;; 1. Parses command line arguments
+;; 2. Loads and processes input markdown
+;; 3. Executes code blocks with caching
+;; 4. Converts content through markdown/HTML pipeline
+;; 5. Applies template and writes final output
+(defn -main
+  "Primary entry point that processes markdown into a complete HTML site.
+   Args:
+     & args - Command line arguments that control processing:
+             - Required input file path
+             - Optional flags for compute/recompute/output
+   Returns:
+     nil, but generates HTML output file as side effect
+   Side effects:
+     - Reads input markdown and template files
+     - Executes Python code blocks
+     - Writes generated HTML to output file
+     - Prints status messages to console"
+  [& args]
+  (println "\n=== Starting Site Generation ===")
+
+  (let [;; Parse command line args into processing configuration
+        {:keys [input-file output-file compute-id recompute?]} (parse-cli-args args)]
+    (println "Reading content file:" input-file)
+    (println "Output will be written to:" output-file)
+    (when compute-id
+      (println "Computing block ID:" compute-id))
+    (when recompute?
+      (println "Forcing recomputation of all blocks"))
+
+    (let [;; Load and validate input markdown file
+          raw-md (try
+                   (slurp input-file)
+                   (catch java.io.FileNotFoundException e
+                     (println "Error: Input file" input-file "not found")
+                     (System/exit 1)))
+
+          ;; Extract frontmatter metadata and main content
+          {:keys [metadata content]} (parse-frontmatter raw-md)
+
+          ;; Process content through transformation pipeline:
+          executed-content (execute-blocks input-file content compute-id recompute?) ; 1. Execute code blocks
+          processed-content (-> executed-content
+                              process-code-blocks                                    ; 2. Format code display
+                              process-sidenotes                                      ; 3. Handle sidenotes
+                              markdown->html)                                        ; 4. Convert markdown to HTML
+
+          ;; Load template and integrate content
+          template (slurp template-file)
+          final-html (replace-placeholders template metadata processed-content)]
+
+      ;; Write completed HTML output
+      (println "\n=== Writing Output ===")
+      (spit output-file final-html)
+      (println "Generated" output-file))))
 
 ;;; === Script Initialization ===
 
