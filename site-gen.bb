@@ -17,63 +17,132 @@
 (def template-file "template.html")
 (def output-file "index.html")
 (def cache-file ".code-outputs.json")
+(def cache-dir ".cache")
 
 ;;; === Cache Management Functions ===
 
-;; Loads and parses the cache file containing previous code execution results
-(defn load-cache
-  "Reads and parses the JSON-like cache file containing code execution outputs.
+;; Ensures cache directory exists and creates it if needed
+(defn ensure-cache-dir!
+  "Creates cache directory if it doesn't exist.
    Args:
      None
    Returns:
-     Map of cached outputs where keys are block IDs and values are execution results.
-     Returns empty map if cache doesn't exist or is invalid."
+     true if directory exists or was created successfully"
   []
-  (println "\n=== Loading Cache ===")
-  (let [cache-path cache-file]                           ; Get configured cache file path
-    (when (.exists (io/file cache-path))                 ; Only proceed if file exists
-      (println "Cache file exists at:" cache-path)
-      (try
-        (let [cache-content (slurp cache-path)           ; Read entire cache file
-              _ (println "Cache content length:" (count cache-content))
-              ;; Parse cache content into map:
-              ;; 1. Validate JSON-like structure
-              ;; 2. Parse key-value pairs manually
-              cache (if (str/starts-with? cache-content "{")
-                     (let [content (-> cache-content
-                                     (subs 1 (dec (count cache-content)))    ; Remove outer braces
-                                     (str/split #"\,(?=\s*\"[^\"]+\":\)"))]  ; Split on commas before keys
-                       (into {}
-                             (for [pair content]
-                               (let [[k v] (str/split pair #":" 2)           ; Split into key & value
-                                     key (str/replace (str/trim k) #"\"" "") ; Remove quotes from key
-                                     val (str/trim v)]                       ; Clean value string
-                                 [key val]))))                               ; Create map entry
-                     {})]                                                    ; Return empty map if invalid
-          (println "Successfully parsed cache with" (count cache) "entries")
-          (println "Cache keys:" (keys cache))
-          cache)                                         ; Return parsed cache map
-        (catch Exception e                               ; Handle any parsing errors
-          (println "Error reading cache:" (str e))
-          {})))))
+  (let [dir (io/file cache-dir)]
+    (when-not (.exists dir)
+      (println "Creating cache directory:" cache-dir)
+      (.mkdir dir))
+    (.exists dir)))
 
-;; Persists the code execution cache to disk storage in a JSON-like format
-(defn save-cache
-  "Saves the code execution cache to a file in JSON-like format.
+;; Generates cache file path for a specific block
+(defn cache-file-path
+  "Constructs path for block-specific cache file.
    Args:
-     cache - Map of code block IDs to their execution outputs
+     input-file - Source markdown file path
+     block-id   - Unique identifier for code block
+   Returns:
+     String path to cache file"
+  [input-file block-id]
+  (let [base-name (-> input-file
+                      io/file
+                      .getName
+                      (str/replace #"\.[^.]+$" ""))]    ; Remove file extension
+    (str cache-dir
+         "/"
+         base-name
+         "-block-"
+         block-id
+         ".edn")))
+
+;; Loads cached output for a specific code block
+(defn load-block-cache
+  "Reads cached output for a specific code block.
+   Args:
+     input-file - Source markdown file path
+     block-id   - Unique identifier for code block
+   Returns:
+     Cached output string if available, nil if no cache exists"
+  [input-file block-id]
+  (println "\n=== Loading Block Cache ===")
+  (ensure-cache-dir!)
+  (let [cache-path (cache-file-path input-file block-id)]
+    (println "Checking cache file:" cache-path)
+    (when (.exists (io/file cache-path))
+      (try
+        (let [cached-data (read-string (slurp cache-path))]  ; Read EDN format
+          (println "Found cached output for block:" block-id)
+          (:output cached-data))                            ; Extract output from cache data
+        (catch Exception e
+          (println "Error reading cache for block" block-id ":" (str e))
+          nil)))))
+
+;; Loads all cached outputs for an input file
+(defn load-cache
+  "Reads all cached block outputs for a given input file.
+   Args:
+     input-file - Source markdown file path
+   Returns:
+     Map of block IDs to their cached outputs"
+  [input-file]
+  (println "\n=== Loading Full Cache ===")
+  (ensure-cache-dir!)
+  (let [cache-pattern (re-pattern (str (-> input-file
+                                          io/file
+                                          .getName
+                                          (str/replace #"\.[^.]+$" ""))
+                                      "-block-\\d+\\.edn"))
+        cache-files (filter #(re-matches cache-pattern (.getName %))
+                           (.listFiles (io/file cache-dir)))]
+    (into {}
+          (for [cache-file cache-files
+                :let [block-id (second (re-find #"-block-(\d+)\.edn$" (.getName cache-file)))
+                      cached-data (try
+                                  (read-string (slurp cache-file))
+                                  (catch Exception e nil))]
+                :when cached-data]
+            [block-id (:output cached-data)]))))
+
+;; Saves execution output for a specific block
+(defn save-block-cache
+  "Persists code block output to cache file.
+   Args:
+     input-file - Source markdown file path
+     block-id   - Unique identifier for code block
+     code       - Source code that was executed
+     output     - Execution output to cache
    Returns:
      nil"
-  [cache]
-  (println "\n=== Saving Cache ===")
-  (println "Saving" (count cache) "outputs to cache")
-  (let [cache-str (str "{"                               ; Start with opening brace
-                   (str/join ","                         ; Join entries with commas
-                            (for [[k v] cache]           ; Transform each cache entry
-                              (format "\"%s\":%s"        ; Format as "key":value
-                                     k v)))
-                   "}")]                                 ; Close with ending brace
-    (spit cache-file cache-str)))                        ; Write cache to disk
+  [input-file block-id code output]
+  (println "\n=== Saving Block Cache ===")
+  (ensure-cache-dir!)
+  (let [cache-path (cache-file-path input-file block-id)
+        cache-data {:block-id block-id                  ; Store metadata with output
+                   :code code
+                   :output output
+                   :timestamp (System/currentTimeMillis)}]
+    (println "Saving cache for block" block-id "to:" cache-path)
+    (try
+      (spit cache-path (pr-str cache-data))            ; Write as EDN format
+      (catch Exception e
+        (println "Error saving cache for block" block-id ":" (str e))))))
+
+;; Saves all block outputs to cache
+(defn save-cache
+  "Persists all block outputs to cache files.
+   Args:
+     input-file - Source markdown file path
+     cache-map  - Map of block IDs to execution outputs
+     blocks     - Sequence of code block definitions
+   Returns:
+     nil"
+  [input-file cache-map blocks]
+  (println "\n=== Saving Full Cache ===")
+  (doseq [block blocks
+          :let [block-id (:id block)
+                output (get cache-map block-id)]
+          :when output]
+    (save-block-cache input-file block-id (:code block) output)))
 
 ;;; === Code Block Processing ===
 
@@ -274,28 +343,28 @@
 (defn execute-blocks
   "Executes Python code blocks and integrates their outputs into content.
    Args:
-     content - String containing executable code blocks
-     compute-id - Optional ID of specific block to execute (nil executes all)
+     input-file  - Source markdown file path
+     content     - String containing executable code blocks
+     compute-id  - Optional ID of specific block to execute (nil executes all)
    Returns:
      Content string with executed code blocks and their outputs integrated"
-  [content compute-id]
+  [input-file content compute-id]
   (println "\n=== Executing Blocks ===")
   (when compute-id
     (println "Computing only block with ID:" compute-id))
 
-  (let [cache (atom (load-cache))                       ; Load existing cache into atom
-        blocks (find-code-blocks content)]              ; Parse code blocks from content
+  (let [cache (atom (load-cache input-file))          ; Pass input-file to load-cache
+        blocks (find-code-blocks content)]
 
     ;; Execute and cache each block's output
     (doseq [block blocks]
       (println "\nProcessing block" (:id block))
-      (when (or (nil? compute-id)                       ; Execute if no specific ID requested
-                (= (:id block) compute-id))             ; Or if this block matches requested ID
-        (let [output (run-python (:code block))         ; Execute the Python code
-              processed (process-output output          ; Process the execution output
-                                      (:output-type block))]
-          (swap! cache assoc (:id block) processed)     ; Cache the processed output
-          (println "Updated cache for block" (:id block)))))
+      (when (or (nil? compute-id)
+                (= (:id block) compute-id))
+        (let [output (run-python (:code block))
+              processed (process-output output (:output-type block))]
+          (save-block-cache input-file (:id block) (:code block) processed)  ; Save individual block
+          (swap! cache assoc (:id block) processed))))
 
     ;; Integrate code and outputs into content
     (let [final-content (reduce (fn [content block]
@@ -303,7 +372,7 @@
                                       code-display (wrap-code-block                ; Format code display
                                                    (:code block) "python")
                                       output-tag (str "<<output id=\""             ; Build output tag
-                                                    (:id block) "\">><</output>>")]
+                                                 (:id block) "\">><</output>>")]
                                   (if block-output
                                     (-> content
                                         ;; Replace full block or just code based on output tag presence
@@ -315,11 +384,11 @@
                                         (str/replace output-tag block-output))
                                     (do
                                       (println "Warning: No cached output for block" (:id block))
-                                      content))))                                 ; Return unchanged if no output
+                                      content))))
                               content                                             ; Initial content
                               blocks)]                                            ; Process all blocks
-      (save-cache @cache)                               ; Persist final cache state
-      final-content)))                                  ; Return processed content
+      (save-cache input-file @cache blocks)                                       ; Pass input-file to save-cache
+      final-content)))                                                            ; Return processed content
 
 ;;; === Frontmatter Processing ===
 
@@ -416,7 +485,7 @@
 
         ;; Process content through transformation pipeline:
         ;; 1. Execute Python code blocks
-        executed-content (execute-blocks content compute-id)
+        executed-content (execute-blocks input-file content compute-id)
         ;; 2. Convert markdown elements to HTML
         processed-content (-> executed-content
                             process-code-blocks         ; Handle code syntax highlighting
