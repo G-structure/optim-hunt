@@ -107,14 +107,6 @@ def train_optimizer_probe(
                 random_state=epoch*batch_size + batch_idx
             )
 
-            # First calculate target gradients before moving data to device
-            target_output = calculate_sgd_gradients(
-                x_train, y_train, x_test, y_test,
-                learning_rates=[learning_rate]
-            )
-            # Ensure the gradient has a batch dimension
-            target_gradients = target_output['gradients'][0:1].to(device)
-
             from optim_hunter.utils import prepare_prompt
             prompt = prepare_prompt(x_train, y_train, x_test)
 
@@ -141,6 +133,17 @@ def train_optimizer_probe(
                 # Average across layers and positions
                 residual_stream = residual_stream.mean(dim=[1, 2])
 
+
+            torch.set_grad_enabled(True)
+
+             # First calculate target gradients before moving data to device
+            target_output = calculate_sgd_gradients(
+                x_train, y_train, x_test, y_test,
+                learning_rates=[learning_rate]
+            )
+             # Ensure the gradient has a batch dimension
+            target_gradients = target_output['gradients'][0:1].to(device)
+
             # Sample random learning rate between 0 and 0.1
             lr_tensor = torch.rand(1, 1, device=device) * 0.1
 
@@ -154,9 +157,9 @@ def train_optimizer_probe(
             loss = nn.MSELoss()(probe_output.gradient, target_gradients)
 
             # Compute gradient cosine similarity
-            cos_sim = nn.CosineSimilarity(dim=0)(
+            cos_sim = nn.CosineSimilarity(dim=1)(  # Change dim=0 to dim=1
                 probe_output.gradient, target_gradients
-            )
+            ).mean()
 
             # Update probe
             optimizer.zero_grad()
