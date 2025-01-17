@@ -71,6 +71,9 @@ class OptimizerProbe(nn.Module):
         if residual_stream.shape[0] != learning_rate.shape[0]:
             learning_rate = learning_rate.expand(batch_size, -1)
 
+        print("Residual stream shape:", residual_stream.shape)
+        print("Learning rate shape:", learning_rate.shape)
+
         # Concatenate residual and learning rate
         # Use dim=-1 for last dimension
         probe_input = torch.cat([residual_stream, learning_rate], dim=-1)
@@ -119,20 +122,24 @@ def train_optimizer_probe(
                     return_cache_object=True
                 )
 
-                # Extract residual streams
                 residual_layers = []
                 for layer_idx in range(model.cfg.n_layers):
                     key = f'blocks.{layer_idx}.hook_resid_post'
-                    # Access cache properly as a dictionary
                     if key in cache:
-                        residual_layers.append(cache[key].detach())
+                        # Move each residual to CPU, detaching from the graph
+                        resid_cpu = cache[key].detach().cpu()
+                        residual_layers.append(resid_cpu)
 
-                # Stack and process residual streams
-                # [batch, layer, pos, d_model]
+                # Stack on CPU
                 residual_stream = torch.stack(residual_layers, dim=1)
-                # Average across layers and positions
-                residual_stream = residual_stream.mean(dim=[1, 2])
 
+                # Clear CUDA cache to free memory
+                del cache
+                torch.cuda.empty_cache()
+
+                # If you need further processing on GPU, move them back
+                residual_stream = residual_stream.to(device)
+                residual_stream = residual_stream.view(-1, residual_stream.shape[-1])
 
             torch.set_grad_enabled(True)
 
@@ -193,18 +200,18 @@ def calculate_sgd_gradients(
     """Calculate gradients after one step of SGD for multiple learning rates."""
     # Convert pandas to numpy then to torch tensors
     if isinstance(x_train, pd.DataFrame):
-        x_train = x_train.values
+        x_train = torch.tensor(x_train.values, dtype=torch.float32)
     if isinstance(y_train, pd.Series):
-        y_train = y_train.values
+        y_train = torch.tensor(y_train.values, dtype=torch.float32)
 
     # Ensure tensors are on CPU and require gradients
     if torch.is_tensor(x_train):
-        x_train = x_train.detach().clone().to("cpu")
+        x_train = x_train.cpu()
     else:
         x_train = torch.tensor(x_train, dtype=torch.float32)
 
     if torch.is_tensor(y_train):
-        y_train = y_train.detach().clone().to("cpu")
+        y_train = y_train.cpu()
     else:
         y_train = torch.tensor(y_train, dtype=torch.float32)
 
@@ -229,8 +236,15 @@ def calculate_sgd_gradients(
     loss.backward()  # Removed retain_graph=True
 
     # Store gradients
-    weight_grad = weights.grad.clone()
-    bias_grad = bias.grad.clone()
+    if weights.grad is not None:
+        weight_grad = weights.grad.clone()
+    else:
+        weight_grad = torch.zeros_like(weights)
+
+    if bias.grad is not None:
+        bias_grad = bias.grad.clone()
+    else:
+        bias_grad = torch.zeros_like(bias)
 
     # Store results for each learning rate
     results = {
