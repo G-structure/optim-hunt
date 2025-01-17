@@ -781,6 +781,44 @@ def create_heatmap_plot(
 
     return plot_html
 
+def render_html_plot(html: str):
+    """Display HTML plot with additional container wrapper.
+
+    This adds a containing div with class plot-container around the raw HTML
+    plot content and prints the result. Useful for consistent styling and layout.
+
+    Args:
+        html: Raw HTML plot content to wrap in container div.
+
+    Returns:
+        None - prints the wrapped HTML directly to output.
+
+    """
+    plot_html = f"""
+    <div class="plot-container">
+        {html}
+    </div>"""
+    print(plot_html)
+
+def render_html_text(text: str):
+    """Wrap text content in a text container div for rendering.
+
+    Useful for displaying text content in a consistent style with plots
+    and other HTML components.
+
+    Args:
+        text: Raw text content to wrap in HTML container div
+
+    Returns:
+        None - prints wrapped HTML text directly to output
+
+    """
+    text_html = f"""
+    <div class="text-container">
+        {text}
+    </div>"""
+    print(text_html)
+
 def with_identifier(identifier: str) -> Callable[..., Callable[..., str]]:
     """Wrap output in a div with an identifier.
 
@@ -806,5 +844,31 @@ def with_identifier(identifier: str) -> Callable[..., Callable[..., str]]:
                 f'<div id="{identifier}" class="identified-content">'
                 f'{output}</div>'
             )
+        return wrapper
+    return decorator
+
+def full_html():
+    """Decorator to make plots use full HTML output."""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Store original to_html method
+            original_to_html = go.Figure.to_html
+
+            # Create modified to_html that forces full_html=True
+            def modified_to_html(self, *th_args, **th_kwargs):
+                th_kwargs['full_html'] = True
+                return original_to_html(self, *th_args, **th_kwargs)
+
+            # Replace to_html method
+            go.Figure.to_html = modified_to_html
+
+            try:
+                # Run the original function
+                result = func(*args, **kwargs)
+            finally:
+                # Restore original to_html method
+                go.Figure.to_html = original_to_html
+
+            return result
         return wrapper
     return decorator
