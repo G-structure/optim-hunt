@@ -69,6 +69,9 @@
                 --text-color-light: #073642;
                 --link-color-light: #2075c7;
                 --border-color-light: #93a1a1;
+
+                /* Common theme */
+                --text-color-subtle: #888;
             }
 
             body {
@@ -100,7 +103,7 @@
             }
 
             .metadata {
-                color: #888;
+                color: --text-color-subtle;
                 font-style: italic;
                 margin-top: 10px;
             }
@@ -126,7 +129,7 @@
                 margin-right: -200px;
                 width: 180px;
                 font-size: 0.9em;
-                color: #888;
+                color: --text-color-subtle;
                 margin-top: 0.3em;
                 padding-left: 20px;
                 transition: all 0.2s ease;
@@ -154,13 +157,6 @@
                 stroke: var(--text-color);
                 stroke-width: 2;
                 transition: all 0.2s ease;
-            }
-
-            .viz-container {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-top: 20px;
             }
 
             @media (max-width: 1200px) {
@@ -226,7 +222,7 @@
             }
 
             .equation-label {
-                color: #888;
+                color: --text-color-subtle;
                 float: right;
                 font-style: italic;
             }
@@ -518,11 +514,14 @@
                 max-width: 800px;  /* Match container max-width */
                 margin: 20px auto;
                 position: relative;
+                height: auto;
             }
 
             .plot-container .plotly-graph-div {
                 width: 100%;
-                height: 400px;  /* Fixed height or use aspect-ratio */
+                height: 100%;  /* Fixed height or use aspect-ratio */
+                max-height: 800px;
+
             }
 
             /* Ensure plots scale properly on smaller screens */
@@ -533,7 +532,7 @@
                 }
 
                 .plot-container .plotly-graph-div {
-                    height: 300px;  /* Smaller height on mobile */
+                    height: 100%;  /* Smaller height on mobile */
                 }
             }
         </style>
