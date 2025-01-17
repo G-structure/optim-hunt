@@ -5,11 +5,13 @@ preparation,
 and tokenization for language model interactions.
 """
 
+from math import e
 from typing import Dict, Hashable, List, Tuple, Union, cast, Callable, Any, Optional
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+from sklearn.utils import Sequence
 import torch
 from transformer_lens import (
     HookedTransformer,
@@ -39,16 +41,6 @@ def prepare_prompt(
     y_train = y_train.round(3)
     x_test = x_test.round(3)
 
-    # Create examples list of dicts combining x and y values
-    examples_text: List[Dict[Union[str, Hashable], float]] = [
-        {**x_row, y_train.name: y_val}
-        for x_row, y_val in zip(
-            cast(List[Dict[str, float]], x_train.to_dict("records")),
-            cast(npt.NDArray[np.float64], y_train.values),
-            strict=False
-        )
-    ]
-
     # Create the template for examples
     template = [
         f"{col_name}: {{{col_name}}}"
@@ -68,6 +60,18 @@ def prepare_prompt(
     # Format the test case using the suffix
     test_dict = cast(Dict[str, float], x_test.to_dict("records")[0])
     test_case = suffix.format(**test_dict)
+    examples_text = []
+    for x_row, y_val in zip(
+        cast(List[Dict[str, float]], x_train.to_dict("records")),
+        cast(npt.NDArray[np.float64], y_train.values),
+        strict=False
+    ):
+        example_dict = {**x_row, y_train.name: y_val}
+        formatted_example = template.format(**example_dict)
+        examples_text.append(formatted_example)
+
+    # Join all examples with double newlines
+    examples_text = "\n\n".join(examples_text)
 
     # Add instruction prefix
     prefix_instruction = (
