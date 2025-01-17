@@ -108,10 +108,7 @@ def calculate_metrics(
 
 def generate_and_compare_predictions(
     model: HookedTransformer,
-    dataset_func: Callable[
-        ...,
-        Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
-    ],
+    dataset_func: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
     regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
     num_samples: int = 5,
     seq_len: Optional[int] = None
@@ -167,14 +164,14 @@ def generate_and_compare_predictions(
             **{col: predictions_df[col].iloc[0]
                for col in predictions_df.columns
                if col != 'true_value'},
-            "LLaMA-7B": model_pred  # Use model name instead of generic "llm"
+            "LLaMA-3.1 8B": model_pred  # Use model name instead of generic "llm"
         }
 
         # Calculate MSE for all predictions including LLM
-        mse_scores = {name: float(mse_df.loc[name, 'MSE'])
-                     for name in mse_df.index}
+        mse_scores = {name: float(mse_df.at[name, 'MSE'])
+                      for name in mse_df.index}
         if model_pred is not None:
-            mse_scores['LLaMA-7B'] = float((model_pred - true_value) ** 2)
+            mse_scores['LLaMA-3.1 8B'] = float((model_pred - true_value) ** 2)
 
         sample_results = {
             "sample_id": i,
@@ -228,8 +225,8 @@ def analyze_low_mse_seeds(
 
     for result in individual_results:
         seed = result["sample_id"]
-        if "LLaMA-7B" in result["mse_scores"]:
-            llm_mse = result["mse_scores"]["LLaMA-7B"]
+        if "LLaMA-3.1 8B" in result["mse_scores"]:
+            llm_mse = result["mse_scores"]["LLaMA-3.1 8B"]
             if llm_mse < 30000:
                 low_mse_seeds.append(seed)
                 # Store all method scores for this seed
