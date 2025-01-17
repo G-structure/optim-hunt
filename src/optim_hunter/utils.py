@@ -432,11 +432,13 @@ def prepare_dataset_prompts(
 
 
 def create_regressor_results(
-    dataset: Union[Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series],
-                  List[Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]]],
-    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
+    dataset: Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series],  # Simplified since we don't use List[Tuple] case
+    regressors: Sequence[Callable[
+        [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],  # Input types
+        Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]  # Return type
+    ]],
     random_state: int = 1
-) -> Union[Tuple[pd.DataFrame, pd.DataFrame], List[Tuple[pd.DataFrame, pd.DataFrame]]]:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Create DataFrame(s) with regressor predictions and performance metrics.
 
     Args:
@@ -469,7 +471,7 @@ def create_regressor_results(
 
         # Initialize predictions dict with true values
         predictions = {
-            'true_value': y_test.values
+            'true_value': cast(np.ndarray, y_test.values)
         }
 
         # Initialize MSE dict
@@ -479,13 +481,14 @@ def create_regressor_results(
         for regressor in regressors:
             result = regressor(x_train, x_test, y_train, y_test, random_state)
             model_name = str(result['model_name'])
-            model_predictions = result['y_predict']
+            model_predictions = cast(npt.NDArray[np.float64], result['y_predict'])
 
             # Store predictions
             predictions[model_name] = model_predictions
 
             # Calculate MSE
-            mse = np.mean((y_test.values - model_predictions) ** 2)
+            y_test_values = cast(np.ndarray, y_test.values)
+            mse = np.mean((y_test_values - model_predictions) ** 2)
             mse_dict[model_name] = mse
 
         # Create DataFrames
@@ -496,9 +499,9 @@ def create_regressor_results(
 
     # Return single tuple if input was single dataset
     if is_single:
-        return results[0]
+        return cast(Tuple[pd.DataFrame, pd.DataFrame], results[0])
 
-    return results
+    return cast(Tuple[pd.DataFrame, pd.DataFrame], results)
 
 
 def extract_model_prediction(
