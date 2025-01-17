@@ -129,7 +129,7 @@
   (let [{:keys [input-file port host]} (parse-args args)]
     (println (format "Starting server at http://%s:%d" host port))
     (println (format "Serving file: %s" input-file))
-    (println "Press 'c' to stop the server")
+    (println "Press '⌃ + C' to stop the server")
     (try
       (let [server (server/run-server (handler input-file)
                                      {:port port

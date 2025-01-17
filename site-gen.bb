@@ -85,34 +85,39 @@
           (println "Error reading cache for block" block-id ":" (str e))
           nil)))))                                           ; Return nil on error
 
-;; Reads and parses cached execution outputs for all code blocks in a markdown file
+;; Loads and assembles all cached code block outputs from individual EDN files
+;; Files are found by matching pattern: {input-filename}-block-{id}.edn
 (defn load-cache
   "Loads all cached code block execution outputs for a given markdown file.
    Args:
      input-file - Path to source markdown file containing code blocks
    Returns:
      Map where:
-       - Keys are block ID strings
-       - Values are maps containing :code and :output"
+       - Keys are block ID strings from cache filenames
+       - Values are maps containing full cache data (:code, :output, etc)
+     Returns empty map if no valid cache files found"
   [input-file]
   (println "\n=== Loading Full Cache ===")
   (ensure-cache-dir!)
-  (let [cache-pattern (re-pattern (str (-> input-file
-                                         io/file
-                                         .getName
-                                         (str/replace #"\.[^.]+$" ""))
-                                     "-block-\\d+\\.edn"))
+  (let [;; Build regex pattern to match cache files for this input
+        cache-pattern (re-pattern (str (-> input-file
+                                         io/file                            ; Convert to File object
+                                         .getName                           ; Get filename
+                                         (str/replace #"\.[^.]+$" ""))      ; Strip extension
+                                     "-block-\\d+\\.edn"))                  ; Match block ID pattern
+        ;; Find all matching cache files in cache directory
         cache-files (filter #(re-matches cache-pattern (.getName %))
                           (.listFiles (io/file cache-dir)))]
     (println "Found" (count cache-files) "cache files")
     (into {}
           (for [cache-file cache-files
+                ;; Extract block ID from filename and load cache data
                 :let [block-id (second (re-find #"-block-(\d+)\.edn$" (.getName cache-file)))
                       cached-data (try
-                                  (read-string (slurp cache-file))
-                                  (catch Exception e nil))]
-                :when cached-data]
-            [block-id cached-data]))))  ; Store the full cache data, not just output                            ; Map ID to output
+                                  (read-string (slurp cache-file))          ; Parse EDN format
+                                  (catch Exception e nil))]                 ; Return nil on error
+                :when cached-data]                                          ; Skip invalid cache entries
+            [block-id cached-data]))))                                      ; Map ID to full cache data
 
 ;;; === Cache Writing Functions ===
 
@@ -383,8 +388,19 @@
           (not cache-data)                              ; Compute if no cache exists
           (not= (:code cache-data) (:code block))))))   ; Compute if code changed
 
-;; Manages the execution of Python code blocks and their output integration
+;; Core function that handles Python code block processing workflow:
+;; 1. Loads/manages execution cache
+;; 2. Executes or retrieves cached block outputs
+;; 3. Integrates results into document content
 (defn execute-blocks
+  "Processes Python code blocks with caching and content integration.
+   Args:
+     input-file  - Path to markdown file containing code blocks
+     content     - String containing markdown content with code blocks
+     compute-id  - Optional ID of specific block to recompute
+     recompute?  - Flag to force recomputation of all blocks
+   Returns:
+     String containing content with executed code blocks and outputs integrated"
   [input-file content compute-id recompute?]
   (println "\n=== Executing Blocks ===")
   (when compute-id
@@ -392,49 +408,50 @@
   (when recompute?
     (println "Forcing recomputation of all blocks"))
 
-  (let [existing-cache (load-cache input-file)
-        cache (atom {})
-        blocks (find-code-blocks content)]
+  (let [existing-cache (load-cache input-file)            ; Load previously cached outputs
+        cache (atom {})                                   ; Initialize cache for this run
+        blocks (find-code-blocks content)]                ; Extract code blocks from content
 
+    ;;; --- Process Each Code Block ---
     (doseq [block blocks]
       (println "\nProcessing block" (:id block))
-      (let [cached-data (get existing-cache (:id block))
+      (let [cached-data (get existing-cache (:id block))  ; Get any existing cached output
             needs-compute? (should-compute-block? block cached-data compute-id recompute?)]
 
+        ;; Either compute new output or use cache
         (if needs-compute?
           (do
             (println "Computing block" (:id block))
-            (let [output (run-python (:code block))
-                  processed (process-output output (:output-type block))]
-              (save-block-cache input-file (:id block) (:code block) processed)
-              (swap! cache assoc (:id block) processed)))
+            (let [output (run-python (:code block))       ; Execute Python code
+                  processed (process-output output (:output-type block))]        ; Format output
+              (save-block-cache input-file (:id block) (:code block) processed)  ; Cache result
+              (swap! cache assoc (:id block) processed))) ; Store in current cache
           (do
             (println "Using cached output for block" (:id block))
-            (swap! cache assoc (:id block) (:output cached-data))))))
+            (swap! cache assoc (:id block) (:output cached-data))))))  ; Use cached output
 
-    ;; Integrate code and outputs into content
+    ;;; --- Integrate Results into Content ---
     (let [final-content (reduce (fn [content block]
-                                (let [block-output (get @cache (:id block))        ; Get cached output
-                                      code-display (wrap-code-block                ; Format code display
+                                (let [block-output (get @cache (:id block))      ; Get block's output
+                                      code-display (wrap-code-block              ; Format code display
                                                    (:code block) "python")
-                                      output-tag (str "<<output id=\""             ; Build output tag
+                                      output-tag (str "<<output id=\""           ; Build output marker
                                                  (:id block) "\">><</output>>")]
                                   (if block-output
                                     (-> content
-                                        ;; Replace full block or just code based on output tag presence
+                                        ;; Handle both inline and separated output cases
                                         (str/replace (:full-match block)
                                                    (if (str/includes? content output-tag)
-                                                     code-display
-                                                     (str code-display block-output)))
-                                        ;; Replace output tag with actual output
-                                        (str/replace output-tag block-output))
+                                                     code-display             ; Code only if output tag exists
+                                                     (str code-display block-output)))  ; Code + output inline
+                                        (str/replace output-tag block-output))  ; Replace output tag if present
                                     (do
                                       (println "Warning: No cached output for block" (:id block))
                                       content))))
-                              content                                             ; Initial content
-                              blocks)]                                            ; Process all blocks
-      (save-cache input-file @cache blocks)                                       ; Pass input-file to save-cache
-      final-content)))                                                            ; Return processed content
+                              content                                          ; Initial content
+                              blocks)]                                         ; Process all blocks
+      (save-cache input-file @cache blocks)              ; Persist final cache state
+      final-content)))                                   ; Return processed content
 
 ;;; === Frontmatter Processing ===
 
