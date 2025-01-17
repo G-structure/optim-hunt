@@ -168,6 +168,10 @@ def prepare_prompt_from_tokens(
     # Add separator before test case
     all_tokens.extend(double_newline.tolist())
 
+    # Print the numerical values in x_test_tokens
+    print(f"Test values:")
+    for col in x_test_tokens.columns:
+        print(f"{col}: {model.to_string(x_test_tokens[col].iloc[0])}")
     # Add test features
     for col in x_test_tokens.columns:
         # Add feature name
@@ -550,4 +554,45 @@ def extract_model_prediction(
             f" for sample {sample_id}" if sample_id is not None else ""
         )
         print(f"Warning: Could not parse model prediction{sample_info}")
+        return None
+
+def extract_numeric_from_logits(
+    model: HookedTransformer,
+    model_out: torch.Tensor,
+    sample_id: Optional[int] = None
+) -> Optional[float]:
+    """Extract numeric prediction from model.run_with_cache() output logits.
+
+    Args:
+        model: The transformer model
+        model_out: Output logits from model.run_with_cache()
+        sample_id: Optional sample identifier for warning messages.
+                  Defaults to None.
+
+    Returns:
+        Optional[float]: Extracted numeric prediction or None if extraction fails
+
+    """
+    # Get most likely token predictions
+    print("Model output shape:", model_out.shape)
+    next_token = model_out.argmax(dim=-1)
+
+    # Convert tokens to text
+    try:
+        pred_text = model.to_string(next_token)
+        print(pred_text[0])
+        # Clean the prediction text
+        generated_part = pred_text.split("Output: ")[-1].strip()
+        pattern = r"[+-]?(?:\d*\.)?\d+"
+        match = re.search(pattern, generated_part)
+        if match:
+            end_pos = match.end()
+            generated_part = generated_part[:end_pos]
+        return float(generated_part)
+
+    except (ValueError, IndexError):
+        sample_info = (
+            f" for sample {sample_id}" if sample_id is not None else ""
+        )
+        print(f"Warning: Could not parse model output{sample_info}")
         return None
