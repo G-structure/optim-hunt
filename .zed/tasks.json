@@ -1,0 +1,45 @@
+// WIP
+// [
+//     {
+//         "label": "Run in Existing REPL",
+//         "command": "bb",
+//         "args": ["py_repl.clj", "send", "$ZED_SELECTED_TEXT"],
+//         "cwd": "${ZED_WORKTREE_ROOT}",
+//         "allow_concurrent_runs": false,
+//         "reveal": "always",
+//         "show_output": true
+//     },
+//     {
+//         "label": "Run in New REPL",
+//         "command": "bb",
+//         "args": [
+//             "py_repl.clj",
+//             "stop",
+//             "&&",
+//             "bb",
+//             "py_repl.clj",
+//             "start",
+//             "&&",
+//             "bb",
+//             "py_repl.clj",
+//             "send",
+//             "$ZED_SELECTED_TEXT"
+//         ],
+//         "cwd": "${ZED_WORKTREE_ROOT}",
+//         "allow_concurrent_runs": false,
+//         "reveal": "always",
+//         "show_output": true
+//     },
+//     {
+//         "label": "Run in New REPL and Show HTML",
+//         "command": "${SHELL:-sh}",
+//         "args": [
+//             "-c",
+//             "bb py_repl.clj stop && bb py_repl.clj start && bb py_repl.clj send \"$ZED_SELECTED_TEXT\" > /tmp/repl_output.html && bb serve.bb -i /tmp/repl_output.html"
+//         ],
+//         "cwd": "${ZED_WORKTREE_ROOT}",
+//         "allow_concurrent_runs": false,
+//         "reveal": "always",
+//         "show_output": true
+//     }
+// ]

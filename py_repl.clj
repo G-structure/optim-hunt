@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-
+(println "WARNING: This tool is a work in progress and may have unexpected behavior")
 (require '[clojure.java.shell :refer [sh]]
          '[clojure.string :as str]
          '[babashka.fs :as fs])
@@ -9,6 +9,21 @@
 
 (defn ensure-repl-dir []
   (fs/create-dirs (fs/parent repl-file)))
+
+(defn escape-quotes [code]
+  (-> code
+      (str/replace "\"" "\\\"")
+      (str/replace "'" "\\'")))
+
+(defn format-python-code [code]
+  (println "Original Python code:\n" code)  ; Debug print
+  (let [formatted (-> code
+                     (str/replace #"\r\n" "\n")     ; Normalize line endings
+                     (str/replace #"\r" "\n")       ; Handle any remaining CR
+                     str/trim                       ; Remove leading/trailing whitespace
+                     escape-quotes)]                ; Escape quotes
+    (println "Formatted Python code:\n" formatted)  ; Debug print
+    formatted))
 
 (defn start-repl []
   (ensure-repl-dir)
@@ -20,6 +35,7 @@ import os
 import time
 from io import StringIO
 import select
+import traceback
 
 def create_repl_server(sock_path):
     # Clean up old socket if it exists
@@ -52,21 +68,50 @@ def create_repl_server(sock_path):
                 continue
 
             output_buffer = StringIO()
+            error_buffer = StringIO()
             original_stdout = sys.stdout
+            original_stderr = sys.stderr
             sys.stdout = output_buffer
+            sys.stderr = error_buffer
 
             try:
                 exec(data, globals_dict, locals_dict)
                 output = output_buffer.getvalue()
-                conn.send((output or 'No output').encode())
+                error = error_buffer.getvalue()
+
+                response = {
+                    'output': output,
+                    'error': error,
+                    'status': 'success'
+                }
+
             except Exception as e:
-                conn.send(str(e).encode())
+                error = error_buffer.getvalue()
+                tb = traceback.format_exc()
+                response = {
+                    'output': output_buffer.getvalue(),
+                    'error': f'{error}\\n{tb}',
+                    'status': 'error'
+                }
             finally:
                 sys.stdout = original_stdout
+                sys.stderr = original_stderr
+
+            import json
+            conn.send(json.dumps(response).encode())
+
         except socket.timeout:
-            conn.send(b'Operation timed out')
+            conn.send(json.dumps({
+                'output': '',
+                'error': 'Operation timed out',
+                'status': 'error'
+            }).encode())
         except Exception as e:
-            conn.send(str(e).encode())
+            conn.send(json.dumps({
+                'output': '',
+                'error': str(e),
+                'status': 'error'
+            }).encode())
         finally:
             conn.close()
 
@@ -97,16 +142,18 @@ if __name__ == '__main__':
               (recur))))))))
 
 (defn send-to-repl [code]
-  (if-not (fs/exists? repl-file)
-    (println "Error: REPL server not running. Start it with './py_repl.clj start'")
-    (do
-      (spit "/tmp/repl_client.py"
-        (str "
+  (let [formatted-code (format-python-code code)]
+    (if-not (fs/exists? repl-file)
+      (println "Error: REPL server not running. Start it with './py_repl.clj start'")
+      (do
+        (spit "/tmp/repl_client.py"
+          (str "
 import socket
 import sys
 import select
+import json
 
-code = '''" code "'''
+code = \"\"\"" formatted-code "\"\"\"
 
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.settimeout(5.0)  # Set timeout for connection
@@ -119,21 +166,34 @@ try:
     ready = select.select([sock], [], [], 5.0)
     if ready[0]:
         response = sock.recv(4096).decode()
-        print(response, end='')
+        result = json.loads(response)
+
+        if result['output']:
+            print(result['output'], end='')
+        if result['error']:
+            print(result['error'], file=sys.stderr, end='')
+
+        if result['status'] == 'error':
+            sys.exit(1)
     else:
         print('Response timeout', file=sys.stderr)
+        sys.exit(1)
 except socket.timeout:
     print('Connection/operation timed out', file=sys.stderr)
+    sys.exit(1)
 except Exception as e:
     print(f'Error: {str(e)}', file=sys.stderr)
+    sys.exit(1)
 finally:
     sock.close()"))
 
-      (let [result (sh "python3" "/tmp/repl_client.py")]
-        (when (not-empty (:out result))
-          (print (:out result)))
-        (when (not-empty (:err result))
-          (println "Error:" (:err result)))))))
+        (let [{:keys [exit out err]} (sh "python3" "/tmp/repl_client.py")]
+          (when (not-empty out)
+            (print out))
+          (when (not-empty err)
+            (binding [*out* *err*]
+              (println "Error:" err)))
+          (System/exit exit))))))
 
 (defn stop-repl []
   (when (fs/exists? repl-pid-file)
