@@ -1,41 +1,66 @@
 """Implements various linear regression methods with detailed computation tracking."""
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-def solve_ols(y_train: pd.Series, x_train: pd.DataFrame) -> Dict[str, np.ndarray]:
-    """Perform Ordinary Least Squares (OLS) regression and calculate intermediate results.
+def solve_ols(
+    y_train: pd.Series,
+    x_train: pd.DataFrame,
+    x_test: pd.DataFrame
+) -> Dict[str, Union[npt.NDArray[np.float64], Dict[str, npt.NDArray[np.float64]]]]:
+    """Perform Ordinary Least Squares (OLS) regression and calculate intermediate
+    results.
 
     Args:
-        y_train (pd.Series): Training labels (target values).
-        x_train (pd.DataFrame): Training features.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
 
     Returns:
-        Dict[str, np.ndarray]: A dictionary containing the following intermediate results:
-            - Design Matrix (XᵀX)
-            - Pseudoinverse ((XᵀX)^(-1))
-            - Weighted Feature Matrix (Xᵀy)
-            - Weights (w)
+        Dict containing:
+            - intermediates: Dict of intermediate calculations
+                - Design Matrix (XᵀX)
+                - Pseudoinverse ((XᵀX)^(-1))
+                - Weighted Feature Matrix (Xᵀy)
+                - Weights (w)
+            - prediction: Predicted values for x_test
 
     """
     # Convert to numpy arrays for computation
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
+
+    # Add bias terms
+    x = np.hstack((
+        np.ones((x.shape[0], 1), dtype=np.float64),
+        x
+    ))
+    x_test_np = np.hstack((
+        np.ones((x_test_np.shape[0], 1), dtype=np.float64),
+        x_test_np
+    ))
 
     # Calculate intermediate results
-    design_matrix = x.T @ x  # XᵀX
-    pseudoinverse = np.linalg.inv(design_matrix)  # (XᵀX)^(-1)
-    weighted_feature_matrix = x.T @ y  # Xᵀy
-    weights = pseudoinverse @ weighted_feature_matrix  # w = (XᵀX)^(-1)Xᵀy
+    design_matrix = x.T @ x
+    pseudoinverse = np.linalg.inv(design_matrix)
+    weighted_feature_matrix = x.T @ y
+    weights = pseudoinverse @ weighted_feature_matrix
 
-    # Return intermediate results
+    # Calculate prediction
+    y_pred = x_test_np @ weights
+
+    # Return intermediate results and prediction
     return {
-        "Design Matrix (XᵀX)": design_matrix,
-        "Pseudoinverse ((XᵀX)^(-1))": pseudoinverse,
-        "Weighted Feature Matrix (Xᵀy)": weighted_feature_matrix,
-        "Weights (w)": weights
+        "intermediates": {
+            "Design Matrix (XᵀX)": design_matrix,
+            "Pseudoinverse ((XᵀX)^(-1))": pseudoinverse,
+            "Weighted Feature Matrix (Xᵀy)": weighted_feature_matrix,
+            "Weights (w)": weights
+        },
+        "prediction": y_pred.flatten()
     }
 
 '''Example usage:
@@ -54,40 +79,44 @@ for key, value in ols_results.items():
 def solve_gradient_descent(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,  # Added x_test parameter
     learning_rate: float = 0.01,
     max_iterations: int = 1000,
     tolerance: float = 1e-6
-) -> Dict[str, Union[np.ndarray, List[np.ndarray], float, int]]:
+) -> Dict[str, Union[np.ndarray, List[np.ndarray], float, int, Dict]]:
     """Perform Gradient Descent for linear regression and calculate intermediate results.
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
-        learning_rate: The step size used in the weight update (default is 0.01).
-        max_iterations: Maximum number of iterations for the gradient descent (default is 1000).
-        tolerance: The convergence threshold for the gradient norm (default is 1e-6).
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        learning_rate: The step size used in the weight update (default is 0.01)
+        max_iterations: Maximum number of iterations (default is 1000)
+        tolerance: The convergence threshold for the gradient norm (default is 1e-6)
 
     Returns:
-        Dict containing the following intermediate results:
-            - Initial Weights (w₀): Initial weight values
-            - Gradients (∇L): Gradient of loss at each iteration
-            - Learning Rate (α): Learning rate value
-            - Weight Updates (Δw): Weight changes at each iteration
-            - Intermediate Weights (w₁, w₂, ..., wₙ): Weights at each iteration
-            - Final Weights (w): Final weight values
-            - Number of Iterations: Total iterations performed
+        Dict containing:
+            - intermediates: Dict of intermediate results including:
+                - Initial Weights (w₀)
+                - Gradients (∇L)
+                - Learning Rate (α)
+                - Weight Updates (Δw)
+                - Intermediate Weights
+                - Final Weights (w)
+                - Number of Iterations
+            - prediction: Predicted values for x_test
     """
     # Convert to numpy arrays for computation
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack(
-        (np.ones((x.shape[0], 1)), x)
-    )  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Initialize weights (w₀) with zeros
-    weights = np.zeros((x.shape[1], 1))
+    # Initialize weights with zeros
+    weights = np.zeros((x.shape[1], 1), dtype=np.float64)
     initial_weights = weights.copy()
 
     # Track intermediate results
@@ -96,35 +125,38 @@ def solve_gradient_descent(
     intermediate_weights: List[np.ndarray] = [initial_weights.flatten()]
 
     for iteration in range(max_iterations):
-        # Compute the predictions
+        # Compute predictions and residuals
         predictions = x @ weights
-
-        # Compute the residuals (errors)
         residuals = predictions - y
 
-        # Compute the gradient of the loss (∇L)
+        # Compute gradient
         gradient = (2 / x.shape[0]) * (x.T @ residuals)
         gradients.append(gradient.flatten())
 
-        # Update weights using the gradient
+        # Update weights
         weight_update = -learning_rate * gradient
         weights += weight_update
         weight_updates.append(weight_update.flatten())
         intermediate_weights.append(weights.flatten())
 
-        # Check for convergence (if the gradient norm is below the tolerance)
+        # Check convergence
         if np.linalg.norm(gradient) < tolerance:
             break
 
-    # Return intermediate results
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
     return {
-        "Initial Weights (w₀)": initial_weights.flatten(),
-        "Gradients (∇L)": gradients,
-        "Learning Rate (α)": learning_rate,
-        "Weight Updates (Δw)": weight_updates,
-        "Intermediate Weights (w₁, w₂, ..., wₙ)": intermediate_weights,
-        "Final Weights (w)": weights.flatten(),
-        "Number of Iterations": iteration + 1
+        "intermediates": {
+            "Initial Weights (w₀)": initial_weights.flatten(),
+            "Gradients (∇L)": gradients,
+            "Learning Rate (α)": learning_rate,
+            "Weight Updates (Δw)": weight_updates,
+            "Intermediate Weights (w₁, w₂, ..., wₙ)": intermediate_weights,
+            "Final Weights (w)": weights.flatten(),
+            "Number of Iterations": iteration + 1
+        },
+        "prediction": y_pred.flatten()
     }
 
 '''Example usage:
@@ -140,34 +172,43 @@ print("Number of Iterations:", gd_results["Number of Iterations"])
 print("Intermediate Weights (first 5):", gd_results["Intermediate Weights (w₁, w₂, ..., wₙ)"][:5])
 '''
 
-def solve_ridge_regression(y_train, x_train, regularization_param=1.0):
-    """
-    Perform Ridge Regression and calculate intermediate results.
+def solve_ridge_regression(
+    y_train: pd.Series,
+    x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
+    regularization_param: float = 1.0
+) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
+    """Perform Ridge Regression and calculate intermediate results.
 
     Args:
-        y_train (pd.Series): Training labels (target values).
-        x_train (pd.DataFrame): Training features.
-        regularization_param (float): The regularization parameter λ (default is 1.0).
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        regularization_param: The regularization parameter λ (default is 1.0)
 
     Returns:
-        dict: A dictionary containing the following intermediate results:
-            - Regularization Term (λI)
-            - Modified Design Matrix (XᵀX + λI)
-            - Pseudoinverse ((XᵀX + λI)^(-1))
-            - Weights (w)
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Regularization Term (λI)
+                - Modified Design Matrix (XᵀX + λI)
+                - Pseudoinverse ((XᵀX + λI)^(-1))
+                - Weights (w)
+            - prediction: Predicted values for x_test
     """
     # Convert to numpy arrays for computation
-    X = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    X = np.hstack((np.ones((X.shape[0], 1)), X))  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Compute the design matrix (XᵀX)
-    design_matrix = X.T @ X
+    design_matrix = x.T @ x
 
     # Create the regularization term (λI)
-    identity_matrix = np.eye(design_matrix.shape[0])  # Identity matrix of the same size as XᵀX
+    identity_matrix = np.eye(design_matrix.shape[0], dtype=np.float64)
     regularization_term = regularization_param * identity_matrix
     regularization_term[0, 0] = 0  # Do not regularize the bias term
 
@@ -178,17 +219,22 @@ def solve_ridge_regression(y_train, x_train, regularization_param=1.0):
     pseudoinverse = np.linalg.inv(modified_design_matrix)
 
     # Compute the weighted feature matrix (Xᵀy)
-    weighted_feature_matrix = X.T @ y
+    weighted_feature_matrix = x.T @ y
 
     # Compute the weights (w = (XᵀX + λI)^(-1)Xᵀy)
     weights = pseudoinverse @ weighted_feature_matrix
 
-    # Return intermediate results
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
     return {
-        "Regularization Term (λI)": regularization_term,
-        "Modified Design Matrix (XᵀX + λI)": modified_design_matrix,
-        "Pseudoinverse ((XᵀX + λI)^(-1))": pseudoinverse,
-        "Weights (w)": weights.flatten()
+        "intermediates": {
+            "Regularization Term (λI)": regularization_term,
+            "Modified Design Matrix (XᵀX + λI)": modified_design_matrix,
+            "Pseudoinverse ((XᵀX + λI)^(-1))": pseudoinverse,
+            "Weights (w)": weights.flatten()
+        },
+        "prediction": y_pred.flatten()
     }
 
 '''Example usage:
@@ -208,35 +254,41 @@ print("Weights (w):\n", ridge_results["Weights (w)"])
 def solve_lasso_regression(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     regularization_param: float = 1.0,
     max_iter: int = 1000,
     tol: float = 1e-4
-) -> Dict[str, Union[List[float], List[np.ndarray], np.ndarray]]:
+) -> Dict[str, Union[Dict[str, Union[List[float], List[np.ndarray], np.ndarray]],
+                    npt.NDArray[np.float64]]]:
     """Apply lasso regression using coordinate descent and calculate results.
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
-        regularization_param: The regularization parameter λ (default is 1.0).
-        max_iter: Maximum number of iterations for optimization (default is 1000).
-        tol: Convergence tolerance for optimization (default is 1e-4).
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        regularization_param: The regularization parameter λ (default is 1.0)
+        max_iter: Maximum number of iterations (default is 1000)
+        tol: Convergence tolerance (default is 1e-4)
 
     Returns:
-        Dict containing the following intermediate results:
-            - Regularization Term (λ||w||₁)
-            - Soft Thresholding Steps
-            - Weights (w)
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Regularization Term (λ||w||₁)
+                - Soft Thresholding Steps
+                - Weights (w)
+            - prediction: Predicted values for x_test
     """
     # Convert to numpy arrays for computation
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack((np.ones((x.shape[0], 1)), x))  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Initialize weights (including bias term)
-    weights = np.zeros((x.shape[1], 1))
+    weights = np.zeros((x.shape[1], 1), dtype=np.float64)
 
     # Number of samples and features
     n_samples, n_features = x.shape
@@ -259,38 +311,45 @@ def solve_lasso_regression(
 
     # Coordinate Descent
     for iteration in range(max_iter):
-        weights_prev = weights.copy()  # Save previous weights for convergence check
+        weights_prev = weights.copy()
 
         for j in range(n_features):
-            # Compute the residual (y - Xw) + contribution of feature j
+            # Compute residual
             residual = y - x @ weights + x[:, j].reshape(-1, 1) * weights[j]
 
-            # Compute the partial correlation
+            # Compute partial correlation
             rho = np.dot(x[:, j], residual.flatten())
 
-            # Update weight j using the soft-thresholding operator
-            if j == 0:  # Do not regularize the bias term
+            # Update weight j
+            if j == 0:  # Do not regularize bias term
                 weights[j] = rho / n_samples
             else:
-                weights[j] = soft_thresholding_operator(rho / n_samples,
-                    regularization_param)
+                weights[j] = soft_thresholding_operator(
+                    rho / n_samples,
+                    regularization_param
+                )
 
         # Compute regularization term
         reg_term = regularization_param * np.sum(np.abs(weights[1:]))
         intermediate_results["Regularization Term (λ||w||₁)"].append(reg_term)
 
-        # Store intermediate weights and soft thresholding steps
+        # Store intermediate results
         intermediate_results["Soft Thresholding Steps"].append(
-            weights.copy().flatten())
+            weights.copy().flatten()
+        )
         intermediate_results["Weights (w)"].append(weights.copy().flatten())
 
-        # Check for convergence
+        # Check convergence
         if np.linalg.norm(weights - weights_prev, ord=1) < tol:
             break
 
-    # Final results
-    intermediate_results["Weights (w)"] = weights.flatten()
-    return intermediate_results
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -308,37 +367,47 @@ print("Final Weights (w):", lasso_results["Weights (w)"])
 def solve_sgd(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     learning_rate: float = 0.01,
     max_iter: int = 100,
     batch_size: int = 1,
-    tol: float = 1e-4
-) -> Dict[str, List[np.ndarray]]:
+    tol: float = 1e-4,
+    random_state: int = 42
+) -> Dict[str, Union[Dict[str, List[npt.NDArray[np.float64]]], npt.NDArray[np.float64]]]:
     """Perform Stochastic Gradient Descent (SGD) and calculate intermediate results.
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
-        learning_rate: Learning rate (α) for weight updates. Default is 0.01.
-        max_iter: Maximum number of iterations. Default is 100.
-        batch_size: Size of the mini-batch for each step. Default is 1.
-        tol: Convergence tolerance for stopping criteria. Default is 1e-4.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        learning_rate: Learning rate (α) for weight updates (default is 0.01)
+        max_iter: Maximum number of iterations (default is 100)
+        batch_size: Size of the mini-batch for each step (default is 1)
+        tol: Convergence tolerance (default is 1e-4)
+        random_state: Random seed for reproducibility (default is 42)
 
     Returns:
-        Dict containing the following intermediate results:
-            - Random Sampling of Data Points: List of batch indices arrays
-            - Gradient of Loss for Current Sample (∇L_i): List of gradient arrays
-            - Intermediate Weights (w₁, w₂, ..., wₙ): List of weight arrays
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Random Sampling of Data Points
+                - Gradient of Loss for Current Sample (∇L_i)
+                - Intermediate Weights (w₁, w₂, ..., wₙ)
+            - prediction: Predicted values for x_test
     """
+    # Set random seed
+    np.random.seed(random_state)
+
     # Convert to numpy arrays for computation
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack((np.ones((x.shape[0], 1)), x))  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Initialize weights (including bias term)
-    weights = np.zeros((x.shape[1], 1))
+    # Initialize weights
+    weights = np.zeros((x.shape[1], 1), dtype=np.float64)
 
     # Number of samples
     n_samples = x.shape[0]
@@ -365,23 +434,34 @@ def solve_sgd(
             # Predict output for the mini-batch
             predictions = X_batch @ weights
 
-            # Compute gradient of the loss for the mini-batch
+            # Compute gradient
             gradient = -(2 / batch_size) * (X_batch.T @ (y_batch - predictions))
 
             # Update weights
             weights -= learning_rate * gradient
 
             # Store intermediate results
-            intermediate_results["Random Sampling of Data Points"].append(batch_indices)
-            intermediate_results["Gradient of Loss for Current Sample (∇L_i)"].append(gradient.flatten())
-            intermediate_results["Intermediate Weights (w₁, w₂, ..., wₙ)"].append(weights.flatten())
+            intermediate_results["Random Sampling of Data Points"].append(
+                batch_indices.copy()
+            )
+            intermediate_results["Gradient of Loss for Current Sample (∇L_i)"].append(
+                gradient.flatten()
+            )
+            intermediate_results["Intermediate Weights (w₁, w₂, ..., wₙ)"].append(
+                weights.flatten()
+            )
 
-        # Check for convergence
+        # Check convergence
         if np.linalg.norm(gradient, ord=2) < tol:
             break
 
-    # Final weights
-    return intermediate_results
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -399,39 +479,43 @@ print("Final Weights (w):", sgd_results["Intermediate Weights (w₁, w₂, ..., 
 def solve_bayesian_linear_regression(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     alpha: float = 1.0,
     beta: float = 1.0
-) -> Dict[str, Dict[str, Union[np.ndarray, float]]]:
+) -> Dict[str, Union[Dict[str, Dict[str, Union[npt.NDArray[np.float64], float]]],
+                    npt.NDArray[np.float64]]]:
     """Perform Bayesian Linear Regression and calculate intermediate results.
 
     Args:
-        y_train (pd.Series): Training labels (target values).
-        x_train (pd.DataFrame): Training features.
-        alpha (float): Precision of the prior distribution (default is 1.0).
-        beta (float): Precision of the likelihood (default is 1.0).
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        alpha: Precision of the prior distribution (default is 1.0)
+        beta: Precision of the likelihood (default is 1.0)
 
     Returns:
-        Dict[str, Dict[str, Union[np.ndarray, float]]]: A dictionary containing
-            the following intermediate results:
-            - Prior Distribution (P(w)): Mean and covariance of the prior.
-            - Likelihood (P(y|X, w)): Represented by the precision of the noise.
-            - Posterior Mean and Covariance: Updated distribution over weights.
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Prior Distribution (P(w)): Mean and covariance of the prior
+                - Likelihood (P(y|X, w)): Precision of the noise
+                - Posterior Mean and Covariance: Updated distribution over weights
+            - prediction: Predicted values for x_test
     """
     # Convert to numpy arrays for computation
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to be a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack((np.ones((x.shape[0], 1)), x))  # Add a column of ones to x
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Number of features (including bias)
     n_features = x.shape[1]
 
     # Compute the prior distribution P(w)
-    prior_mean = np.zeros((n_features, 1))  # Prior mean (assume zero mean for
-                                           # weights)
-    prior_covariance = (1 / alpha) * np.eye(n_features)  # Prior covariance
+    prior_mean = np.zeros((n_features, 1), dtype=np.float64)
+    prior_covariance = (1 / alpha) * np.eye(n_features, dtype=np.float64)
 
     # Compute the likelihood precision (β) and design matrix xᵀx
     likelihood_precision = beta
@@ -445,8 +529,11 @@ def solve_bayesian_linear_regression(
     # Compute the posterior mean
     posterior_mean = posterior_covariance @ (likelihood_precision * x.T @ y)
 
-    # Intermediate results to probe
-    intermediate_results: Dict[str, Dict[str, Union[np.ndarray, float]]] = {
+    # Calculate prediction using posterior mean as weights
+    y_pred = x_test_np @ posterior_mean
+
+    # Store intermediate results
+    intermediate_results: Dict[str, Dict[str, Union[npt.NDArray[np.float64], float]]] = {
         "Prior Distribution (P(w))": {
             "Mean": prior_mean.flatten(),
             "Covariance": prior_covariance
@@ -460,7 +547,10 @@ def solve_bayesian_linear_regression(
         }
     }
 
-    return intermediate_results
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -485,28 +575,33 @@ print("Covariance:", bayesian_results["Posterior Mean and Covariance"]["Covarian
 
 def solve_normal_equation(
     y_train: pd.Series,
-    x_train: pd.DataFrame
-) -> Dict[str, np.ndarray]:
+    x_train: pd.DataFrame,
+    x_test: pd.DataFrame
+) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
     """Solve linear regression using the Normal Equation and compute intermediate results.
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
 
     Returns:
-        Dict containing the following intermediate results:
-            - Transpose of X (Xᵀ): Transposed feature matrix.
-            - Design Matrix (XᵀX): Product of Xᵀ and X.
-            - Weighted Feature Matrix (Xᵀy): Product of Xᵀ and y.
-            - Weights (w): Regression coefficients.
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Transpose of X (Xᵀ)
+                - Design Matrix (XᵀX)
+                - Weighted Feature Matrix (Xᵀy)
+                - Weights (w)
+            - prediction: Predicted values for x_test
     """
     # Convert input data to numpy arrays for matrix computations
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack((np.ones((x.shape[0], 1)), x))  # Add a column of ones to x
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Compute the intermediate results
     x_transpose = x.T  # Transpose of x
@@ -516,15 +611,21 @@ def solve_normal_equation(
     # Compute the weights using the Normal Equation
     weights = np.linalg.inv(design_matrix) @ weighted_feature_matrix
 
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
     # Store intermediate results
-    intermediate_results: Dict[str, np.ndarray] = {
+    intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
         "Transpose of X (Xᵀ)": x_transpose,
         "Design Matrix (XᵀX)": design_matrix,
         "Weighted Feature Matrix (Xᵀy)": weighted_feature_matrix.flatten(),
         "Weights (w)": weights.flatten()
     }
 
-    return intermediate_results
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -551,57 +652,68 @@ print(normal_equation_results["Weights (w)"])
 def solve_ridge_regression(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     lambda_reg: float = 1.0
-) -> Dict[str, np.ndarray]:
+) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
     """Solve Ridge Regression using closed-form solution and compute intermediate results.
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
-        lambda_reg: Regularization parameter (λ). Default is 1.0.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        lambda_reg: Regularization parameter (λ). Default is 1.0
 
     Returns:
-        Dict containing the following intermediate results:
-            - Regularization Term (λI): Regularization term added to design matrix.
-            - Modified Design Matrix (XᵀX + λI): Regularized design matrix.
-            - Weighted Feature Matrix (Xᵀy): Feature matrix weighted by targets.
-            - Weights (w): Final regression coefficients.
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Regularization Term (λI)
+                - Modified Design Matrix (XᵀX + λI)
+                - Weighted Feature Matrix (Xᵀy)
+                - Weights (w)
+            - prediction: Predicted values for x_test
     """
     # Convert input data to numpy arrays for matrix computations
-    X = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to a column vector
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    X = np.hstack((np.ones((X.shape[0], 1)), X))  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Compute the design matrix
-    X_transpose = X.T  # Transpose of X
-    design_matrix = X_transpose @ X  # XᵀX
+    x_transpose = x.T
+    design_matrix = x_transpose @ x
 
     # Compute the regularization term
-    I = np.eye(design_matrix.shape[0])  # Identity matrix
-    I[0, 0] = 0  # Do not regularize the bias term
-    regularization_term = lambda_reg * I  # λI
+    identity = np.eye(design_matrix.shape[0], dtype=np.float64)
+    identity[0, 0] = 0  # Do not regularize the bias term
+    regularization_term = lambda_reg * identity
 
     # Compute the modified design matrix
-    modified_design_matrix = design_matrix + regularization_term  # XᵀX + λI
+    modified_design_matrix = design_matrix + regularization_term
 
     # Compute the weighted feature matrix
-    weighted_feature_matrix = X_transpose @ y  # Xᵀy
+    weighted_feature_matrix = x_transpose @ y
 
     # Compute the weights using the Ridge Regression closed-form solution
     weights = np.linalg.inv(modified_design_matrix) @ weighted_feature_matrix
 
+    # Calculate prediction for test data
+    y_pred = x_test_np @ weights
+
     # Store intermediate results
-    intermediate_results = {
+    intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
         "Regularization Term (λI)": regularization_term,
         "Modified Design Matrix (XᵀX + λI)": modified_design_matrix,
         "Weighted Feature Matrix (Xᵀy)": weighted_feature_matrix.flatten(),
         "Weights (w)": weights.flatten()
     }
 
-    return intermediate_results
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -628,84 +740,95 @@ print(ridge_results["Weights (w)"])
 def solve_irls(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     max_iter: int = 100,
     tol: float = 1e-6
-) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
-    """Solve a regression problem using Iterative Reweighted Least Squares (IRLS).
+) -> Dict[str, Union[Dict[str, Union[List[npt.NDArray[np.float64]],
+                                   npt.NDArray[np.float64]]],
+                    npt.NDArray[np.float64]]]:
+    """Solve regression using Iterative Reweighted Least Squares (IRLS).
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
-        max_iter: Maximum number of iterations for convergence. Default is 100.
-        tol: Tolerance for convergence. Default is 1e-6.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
+        max_iter: Maximum number of iterations for convergence (default is 100)
+        tol: Tolerance for convergence (default is 1e-6)
 
     Returns:
-        Dict containing the following intermediate results:
-            - Hessian Matrix (H): Second derivative of loss function at each
-                iteration.
-            - Gradient of Loss (∇L): Gradient of loss function at each iteration.
-            - Weight Updates (Δw): Changes in weights at each iteration.
-            - Final Weights (w): Final regression coefficients after convergence.
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Hessian Matrix (H): Second derivative of loss function
+                - Gradient of Loss (∇L): Gradient of loss function
+                - Weight Updates (Δw): Changes in weights
+                - Final Weights (w): Final regression coefficients
+            - prediction: Predicted values for x_test
     """
-    # Convert input data to numpy arrays for matrix computations
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to a column vector
+    # Convert input data to numpy arrays
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Add a bias term (intercept) to the feature matrix
-    x = np.hstack((np.ones((x.shape[0], 1)), x))  # Add a column of ones to X
+    # Add bias terms
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
     n_samples, n_features = x.shape
 
-    # Initialize weights (w) to zeros
-    w = np.zeros((n_features, 1))
+    # Initialize weights to zeros
+    w = np.zeros((n_features, 1), dtype=np.float64)
 
     # Store intermediate results
-    hessian_matrices = []
-    gradients = []
-    weight_updates = []
+    hessian_matrices: List[npt.NDArray[np.float64]] = []
+    gradients: List[npt.NDArray[np.float64]] = []
+    weight_updates: List[npt.NDArray[np.float64]] = []
 
     for iteration in range(max_iter):
-        # Compute the predictions
+        # Compute predictions and residuals
         y_pred = x @ w
-
-        # Compute the residuals
         residuals = y - y_pred
 
-        # Compute the weights for the diagonal weight matrix
+        # Compute weights for diagonal weight matrix
         weights_diag = np.maximum(1e-6, np.abs(residuals))  # Avoid division by zero
 
-        # Form the diagonal weight matrix W
+        # Form diagonal weight matrix W
         W = np.diagflat(1 / weights_diag)
 
-        # Compute the Hessian matrix (H = XᵀWX)
+        # Compute Hessian matrix (H = XᵀWX)
         H = x.T @ W @ x
         hessian_matrices.append(H)
 
-        # Compute the gradient of the loss function (∇L = XᵀW(y - Xw))
+        # Compute gradient of loss function (∇L = XᵀW(y - Xw))
         gradient = x.T @ W @ residuals
         gradients.append(gradient.flatten())
 
-        # Compute the weight update (Δw = H⁻¹ ∇L)
+        # Compute weight update (Δw = H⁻¹ ∇L)
         delta_w = np.linalg.inv(H) @ gradient
         weight_updates.append(delta_w.flatten())
 
         # Update weights
         w += delta_w
 
-        # Check for convergence
+        # Check convergence
         if np.linalg.norm(delta_w) < tol:
             print(f"Converged in {iteration + 1} iterations.")
             break
 
-    # Store final results
-    results = {
+    # Calculate prediction for test data
+    y_pred = x_test_np @ w
+
+    # Store results
+    intermediate_results: Dict[str, Union[List[npt.NDArray[np.float64]],
+                                        npt.NDArray[np.float64]]] = {
         "Hessian Matrices (H)": hessian_matrices,
         "Gradients of Loss (∇L)": gradients,
         "Weight Updates (Δw)": weight_updates,
-        "Final Weights (w)": w.flatten(),
+        "Final Weights (w)": w.flatten()
     }
 
-    return results
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 # Load dataset
@@ -732,37 +855,44 @@ print(irls_results["Final Weights (w)"])
 def solve_pcr(
     y_train: pd.Series,
     x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
     n_components: Optional[int] = None
-) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
-    """Solve a regression problem using Principal Component Regression (PCR).
+) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
+    """Solve regression using Principal Component Regression (PCR).
 
     Args:
-        y_train: Training labels (target values).
-        x_train: Training features.
+        y_train: Training labels (target values)
+        x_train: Training features
+        x_test: Test features to predict on
         n_components: Number of principal components to retain. If None, all
-            components are retained. Default is None.
+            components are retained. Default is None
 
     Returns:
-        Dict containing the following intermediate results:
-            - Principal Components: Eigenvectors of the covariance matrix of X
-            - Explained Variance: Variance explained by each principal component
-            - Transformed Data (PCs): Data projected onto the principal components
-            - Weights (w): Final regression coefficients
-
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Principal Components: Eigenvectors of covariance matrix
+                - Explained Variance: Variance explained by components
+                - Transformed Data (PCs): Data projected onto components
+                - Weights (w): Final regression coefficients
+            - prediction: Predicted values for x_test
     """
-    # Convert input data to numpy arrays for matrix computations
-    x = x_train.to_numpy()
-    y = y_train.to_numpy().reshape(-1, 1)  # Reshape y to a column vector
+    # Convert input data to numpy arrays
+    x = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
-    # Standardize the features (mean = 0, std = 1)
-    X_mean = np.mean(x, axis=0)
-    X_std = np.std(x, axis=0)
-    X_standardized = (x - X_mean) / X_std
+    # Standardize the training features
+    x_mean = np.mean(x, axis=0)
+    x_std = np.std(x, axis=0)
+    x_standardized = (x - x_mean) / x_std
+
+    # Standardize test features using training statistics
+    x_test_standardized = (x_test_np - x_mean) / x_std
 
     # Compute covariance matrix of standardized features
-    covariance_matrix = np.cov(X_standardized.T)
+    covariance_matrix = np.cov(x_standardized.T)
 
-    # Perform eigen decomposition to compute principal components
+    # Perform eigen decomposition
     eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
 
     # Sort eigenvalues and eigenvectors in descending order
@@ -774,26 +904,39 @@ def solve_pcr(
     if n_components is not None:
         eigenvectors = eigenvectors[:, :n_components]
 
-    # Project the standardized data onto the principal components
-    transformed_data = X_standardized @ eigenvectors
+    # Project the standardized data onto principal components
+    transformed_train = x_standardized @ eigenvectors
+    transformed_test = x_test_standardized @ eigenvectors
 
-    # Perform regression on the transformed data
-    # Add a bias term (intercept) to the transformed data
-    transformed_data_with_bias = np.hstack(
-        (np.ones((transformed_data.shape[0], 1)), transformed_data)
-    )
-    w = np.linalg.inv(transformed_data_with_bias.T @ transformed_data_with_bias) @ \
-        (transformed_data_with_bias.T @ y)
+    # Add bias terms to transformed data
+    transformed_train_with_bias = np.hstack((
+        np.ones((transformed_train.shape[0], 1), dtype=np.float64),
+        transformed_train
+    ))
+    transformed_test_with_bias = np.hstack((
+        np.ones((transformed_test.shape[0], 1), dtype=np.float64),
+        transformed_test
+    ))
+
+    # Compute weights using transformed training data
+    w = np.linalg.inv(transformed_train_with_bias.T @ transformed_train_with_bias) @ \
+        (transformed_train_with_bias.T @ y)
+
+    # Calculate prediction using transformed test data
+    y_pred = transformed_test_with_bias @ w
 
     # Store intermediate results
-    results = {
+    intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
         "Principal Components": eigenvectors,
         "Explained Variance": eigenvalues[:n_components] if n_components else eigenvalues,
-        "Transformed Data (PCs)": transformed_data,
-        "Weights (w)": w.flatten(),
+        "Transformed Data (PCs)": transformed_train,
+        "Weights (w)": w.flatten()
     }
 
-    return results
+    return {
+        "intermediates": intermediate_results,
+        "prediction": y_pred.flatten()
+    }
 
 '''Example usage:
 x_train, y_train, x_test, y_test = get_dataset_friedman_1()
@@ -823,21 +966,22 @@ def solve_knn(
     y_train: npt.NDArray[np.float64],
     X_test: npt.NDArray[np.float64],
     k: int
-) -> Dict[str, Union[npt.NDArray[np.float64], npt.NDArray[np.int64]]]:
-    """Solves a classification problem using K-Nearest Neighbors (KNN).
+) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
+    """Solve regression using K-Nearest Neighbors (KNN).
 
     Args:
-        X_train: Training features array.
-        y_train: Training labels array.
-        X_test: Test features array.
-        k: Number of nearest neighbors.
+        X_train: Training features array
+        y_train: Training labels array
+        X_test: Test features array
+        k: Number of nearest neighbors
 
     Returns:
-        Dict containing the following intermediate results:
-            - Distances (D): Distance matrix between test and training points.
-            - Neighbor Indices (I): Indices of the k-nearest neighbors.
-            - Neighbor Labels (L): Labels of the k-nearest neighbors.
-            - Predicted Labels (y_pred): Predicted labels for test points.
+        Dict containing:
+            - intermediates: Dict of intermediate calculations including:
+                - Distances (D): Distance matrix between test and training points
+                - Neighbor Indices (I): Indices of k-nearest neighbors
+                - Neighbor Labels (L): Labels of k-nearest neighbors
+            - prediction: Predicted values for X_test
 
     """
     num_test = X_test.shape[0]
@@ -859,15 +1003,14 @@ def solve_knn(
         unique, counts = np.unique(neighbor_labels[i], return_counts=True)
         y_pred[i] = unique[np.argmax(counts)]
 
-    # Store intermediate results
-    results = {
-        "Distances (D)": distances,
-        "Neighbor Indices (I)": neighbor_indices,
-        "Neighbor Labels (L)": neighbor_labels,
-        "Predicted Labels (y_pred)": y_pred
+    return {
+        "intermediates": {
+            "Distances (D)": distances,
+            "Neighbor Indices (I)": neighbor_indices,
+            "Neighbor Labels (L)": neighbor_labels
+        },
+        "prediction": y_pred
     }
-
-    return results
 ''' Example usage:
 x_train, y_train, x_test, y_test = get_dataset_friedman_1(random_state=1)
 
