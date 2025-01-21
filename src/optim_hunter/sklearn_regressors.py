@@ -1524,19 +1524,39 @@ def kernel_ridge_regression(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     model = KernelRidge()
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="kernel_ridge",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "dual_coef_": model.dual_coef_,
+            "alpha": model.alpha,
+            "kernel": model.kernel
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def lr_with_polynomial_features_regression(
@@ -1560,6 +1580,9 @@ def lr_with_polynomial_features_regression(
     """
     degree = cast(int, kwargs.get("degree", 2))
 
+    # Start timing
+    start_fit = time.time()
+    
     # Create pipeline that transforms data using PolynomialFeatures then
     # applies Linear Regression
     model = Pipeline(
@@ -1570,17 +1593,35 @@ def lr_with_polynomial_features_regression(
     )
 
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="lr_with_polynomial_features",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "polynomial_degree": degree,
+            "n_features_": model.named_steps['poly'].n_features_,
+            "n_output_features_": model.named_steps['poly'].n_output_features_,
+            "coef_": model.named_steps['linear'].coef_
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def spline_regression(
@@ -1607,6 +1648,9 @@ def spline_regression(
     # Same defaults as SplineTransformer
     degree = cast(int, kwargs.get("degree", 3))
 
+    # Start timing
+    start_fit = time.time()
+    
     # Create pipeline that transforms data using SplineTransformer then
     # applies Linear Regression
     model = Pipeline(
@@ -1616,17 +1660,35 @@ def spline_regression(
         ]
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="spline",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_knots": n_knots,
+            "degree": degree,
+            "bspline_basis": model.named_steps['spline'].bsplines_,
+            "coef_": model.named_steps['linear'].coef_
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def baseline_average(
