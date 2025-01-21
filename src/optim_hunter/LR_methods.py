@@ -467,10 +467,19 @@ def solve_lasso_regression(
         if np.linalg.norm(weights - weights_prev, ord=1) < tol:
             break
 
-    # Calculate prediction for test data
+    # Track convergence
+    converged = np.linalg.norm(gradient) < tolerance
+    final_tolerance = np.linalg.norm(gradient)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="lasso_regression",
         x_train=x_train,
         x_test=x_test,
@@ -479,6 +488,20 @@ def solve_lasso_regression(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.add_convergence_info(
+        n_iter=iteration + 1,
+        tolerance=final_tolerance,
+        converged=converged
+    )
+    results.compute_performance_metrics()
+
+    if not converged:
+        results.add_warning("Failed to converge in maximum iterations")
+
+    return results
 
 def solve_sgd(
     x_train: pd.DataFrame,
