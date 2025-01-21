@@ -402,6 +402,9 @@ def solve_lasso_regression(
     max_iter = kwargs.get("max_iter", 1000)
     tol = kwargs.get("tol", 1e-4)
 
+    # Start timing
+    start_fit = time.time()
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
