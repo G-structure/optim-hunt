@@ -1227,19 +1227,39 @@ def knn_regression_v3(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     model = KNeighborsRegressor(n_neighbors=3, weights="distance")
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="knn_v3",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_neighbors": model.n_neighbors,
+            "effective_metric_": model.effective_metric_,
+            "weights": model.weights
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def knn_regression_v4(
@@ -1261,19 +1281,39 @@ def knn_regression_v4(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     model = KNeighborsRegressor(n_neighbors=1, weights="distance")
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="knn_v4",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_neighbors": model.n_neighbors,
+            "effective_metric_": model.effective_metric_,
+            "weights": model.weights
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def knn_regression_v5_adaptable(
@@ -1299,6 +1339,10 @@ def knn_regression_v5_adaptable(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
+    # Adapt number of neighbors based on dataset size
     if x_train.shape[0] < 3:
         n_neighbors = 1
     elif x_train.shape[0] < 7:
@@ -1308,17 +1352,35 @@ def knn_regression_v5_adaptable(
 
     model = KNeighborsRegressor(n_neighbors=n_neighbors, weights="distance")
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="knn_v5_adaptable",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_neighbors": model.n_neighbors,
+            "effective_metric_": model.effective_metric_,
+            "weights": model.weights,
+            "dataset_size": x_train.shape[0]
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def knn_regression_generic(
@@ -1342,19 +1404,40 @@ def knn_regression_generic(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     model = KNeighborsRegressor(**knn_kwargs)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name=model_name,
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_neighbors": model.n_neighbors,
+            "effective_metric_": model.effective_metric_,
+            "weights": model.weights,
+            "knn_kwargs": knn_kwargs
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def knn_regression_search() -> List[Callable[
@@ -1387,7 +1470,10 @@ def knn_regression_search() -> List[Callable[
                     def knn_fn(x_train: pd.DataFrame, x_test: pd.DataFrame,
                              y_train: pd.Series, y_test: pd.Series,
                              random_state: int = 1) -> RegressionResults:
-                        return knn_regression_generic(
+                        # Start timing
+                        start_fit = time.time()
+                        
+                        results = knn_regression_generic(
                             x_train,
                             x_test,
                             y_train,
@@ -1399,6 +1485,20 @@ def knn_regression_search() -> List[Callable[
                                 "p": p
                             }
                         )
+                        
+                        # Add search parameters to intermediates
+                        if results.intermediates is None:
+                            results.intermediates = {}
+                        results.intermediates.update({
+                            "search_params": {
+                                "iteration": i,
+                                "n_neighbors": n,
+                                "weights": w,
+                                "p": p
+                            }
+                        })
+                        
+                        return results
                     return knn_fn
                 knn_fns.append(create_knn(n_neighbors_val, weights_val,
                     p_val, idx))
