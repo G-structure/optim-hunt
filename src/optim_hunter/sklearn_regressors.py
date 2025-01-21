@@ -424,6 +424,10 @@ def mlp_universal_approximation_theorem3(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = MLPRegressor(
         hidden_layer_sizes=(1000,),
         activation="relu",
@@ -431,9 +435,16 @@ def mlp_universal_approximation_theorem3(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="mlp_uat_3",
         x_train=x_train,
         x_test=x_test,
@@ -442,6 +453,15 @@ def mlp_universal_approximation_theorem3(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    if not model.n_iter_ < model.max_iter:
+        results.add_warning("Failed to converge in maximum iterations")
+
+    return results
 
 
 def mlp_deep1(
@@ -464,6 +484,10 @@ def mlp_deep1(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = MLPRegressor(
         hidden_layer_sizes=(10, 10),
         activation="relu",
@@ -471,9 +495,16 @@ def mlp_deep1(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="mlp_deep1",
         x_train=x_train,
         x_test=x_test,
@@ -482,6 +513,15 @@ def mlp_deep1(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    if not model.n_iter_ < model.max_iter:
+        results.add_warning("Failed to converge in maximum iterations")
+
+    return results
 
 
 def mlp_deep2(
@@ -504,6 +544,10 @@ def mlp_deep2(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 10),
         activation="relu",
@@ -511,9 +555,16 @@ def mlp_deep2(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="mlp_deep2",
         x_train=x_train,
         x_test=x_test,
@@ -522,6 +573,15 @@ def mlp_deep2(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    if not model.n_iter_ < model.max_iter:
+        results.add_warning("Failed to converge in maximum iterations")
+
+    return results
 
 
 def mlp_deep3(
@@ -544,6 +604,10 @@ def mlp_deep3(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 30, 20, 10),
         activation="relu",
@@ -551,9 +615,16 @@ def mlp_deep3(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="mlp_deep3",
         x_train=x_train,
         x_test=x_test,
@@ -562,6 +633,15 @@ def mlp_deep3(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    if not model.n_iter_ < model.max_iter:
+        results.add_warning("Failed to converge in maximum iterations")
+
+    return results
 
 
 def random_forest(
