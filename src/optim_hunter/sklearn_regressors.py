@@ -664,19 +664,39 @@ def random_forest(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = RandomForestRegressor(max_depth=3, random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="random_forest",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "feature_importances": model.feature_importances_,
+            "n_estimators": model.n_estimators
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def bagging(
@@ -699,19 +719,39 @@ def bagging(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = BaggingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="bagging",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "n_estimators": model.n_estimators_,
+            "estimators_samples": [len(s) for s in model.estimators_samples_]
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def gradient_boosting(
@@ -734,19 +774,40 @@ def gradient_boosting(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = GradientBoostingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="gradient_boosting",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "feature_importances": model.feature_importances_,
+            "train_score": model.train_score_,
+            "n_estimators": model.n_estimators
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def adaboost(
     x_train: pd.DataFrame,
@@ -768,19 +829,41 @@ def adaboost(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = AdaBoostRegressor(n_estimators=100, random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="adaboost",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "feature_importances": model.feature_importances_,
+            "estimator_weights": model.estimator_weights_,
+            "estimator_errors": model.estimator_errors_,
+            "n_estimators": model.n_estimators
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def voting(
@@ -803,6 +886,10 @@ def voting(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     # Define base models for voting
     base_models = [
         ('lr', LinearRegression()),
@@ -811,17 +898,39 @@ def voting(
     ]
     model = VotingRegressor(estimators=base_models)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Get individual predictions from each estimator
+    individual_predictions = {
+        name: est.predict(x_test) 
+        for name, est in model.named_estimators_.items()
+    }
+
+    # Create results
+    results = RegressionResults(
         model_name="voting",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "individual_predictions": individual_predictions,
+            "estimators": [name for name, _ in base_models]
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def bayesian_regression1(
     x_train: pd.DataFrame,
