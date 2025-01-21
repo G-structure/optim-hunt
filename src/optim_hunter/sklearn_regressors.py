@@ -33,20 +33,16 @@ from sklearn.svm import SVR
 from transformer_lens import HookedTransformer
 
 from optim_hunter.utils import prepare_prompt
+from optim_hunter.LR_methods import RegressionResults
 
 import numpy.typing as npt
-
-
 
 def create_llm_regressor(
     model: HookedTransformer,
     model_name: str,
     max_new_tokens: int = 1,
     temperature: float = 0.0
-) -> Callable[
-    [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-    Dict[str, Union[str, pd.DataFrame, pd.Series, List[Optional[float]]]]
-]:
+) -> Callable[[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int], RegressionResults]:
     """Create an LLM regressor with specified parameters.
 
     Args:
@@ -57,59 +53,59 @@ def create_llm_regressor(
 
     Returns:
         Callable: A function that implements LLM regression with the specified
-            configuration
+            configuration, returning RegressionResults
 
     """
-
-
     def llm_regressor(
-            x_train: pd.DataFrame,
-            x_test: pd.DataFrame,
-            y_train: pd.Series,
-            y_test: pd.Series,
-            random_state: int = 1
-    ) -> Dict[str, Union[
-        str, pd.DataFrame, pd.Series, List[Optional[float]]]]:
-            """Run regression using the configured LLM.
+        x_train: pd.DataFrame,
+        x_test: pd.DataFrame,
+        y_train: pd.Series,
+        y_test: pd.Series,
+        random_state: int = 1
+    ) -> RegressionResults:
+        """Run regression using the configured LLM.
 
-            Args:
-                x_train: Training features
-                x_test: Test features
-                y_train: Training labels
-                y_test: Test labels
-                random_state: Random seed for reproducibility
+        Args:
+            x_train: Training features
+            x_test: Test features
+            y_train: Training labels
+            y_test: Test labels
+            random_state: Random seed for reproducibility
 
-            Returns:
-                Dict containing model info and predictions
+        Returns:
+            RegressionResults containing model predictions and metadata
 
-            """
-            # Prepare prompt from training data and test input
-            prompt = prepare_prompt(x_train, y_train, x_test)
+        """
+        # Prepare prompt from training data and test input
+        prompt = prepare_prompt(x_train, y_train, x_test)
 
-            # Generate prediction
-            pred_text = str(model.generate(
-                prompt, max_new_tokens=max_new_tokens, temperature=temperature
-            ))
+        # Generate prediction
+        pred_text = str(model.generate(
+            prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature
+        ))
 
-            try:
-                # Extract generated value and convert to float
-                generated_part = str(pred_text.replace(prompt, "").strip())
-                y_predict = float(generated_part)
-            except ValueError:
-                print(f"Warning: Could not parse model prediction: {pred_text}")
-                y_predict = None
+        try:
+            # Extract generated value and convert to float
+            generated_part = str(pred_text.replace(prompt, "").strip())
+            y_predict = float(generated_part)
+        except ValueError:
+            print(f"Warning: Could not parse model prediction: {pred_text}")
+            y_predict = np.nan
 
-            # Convert test labels to numpy array with explicit type
-            y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
+        # Convert prediction to numpy array
+        y_pred = np.array([y_predict], dtype=np.float64)
 
-            return {
-                "model_name": f"llm-{model_name}",
-                "x_train": x_train,
-                "x_test": x_test,
-                "y_train": y_train,
-                "y_test": pd.Series(y_test_np),
-                "y_predict": [y_predict],
-            }
+        return RegressionResults(
+            model_name=f"llm-{model_name}",
+            x_train=x_train,
+            x_test=x_test,
+            y_train=y_train,
+            y_test=y_test,
+            y_predict=y_pred,
+            intermediates=None  # No intermediate results for LLM
+        )
 
     return llm_regressor
 
@@ -119,8 +115,8 @@ def linear_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Linear regression model using scikit-learn's implementation.
 
     Args:
@@ -128,26 +124,24 @@ def linear_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = LinearRegression()
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "linear_regression",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="linear_regression",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def ridge(
@@ -155,8 +149,8 @@ def ridge(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Ridge regression model using scikit-learn's implementation.
 
     Args:
@@ -164,26 +158,25 @@ def ridge(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = Ridge(random_state=random_state)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "ridge",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="ridge",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def lasso(
@@ -191,8 +184,8 @@ def lasso(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Lasso regression model using scikit-learn's implementation.
 
     Args:
@@ -200,26 +193,25 @@ def lasso(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = Lasso(random_state=random_state)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "lasso",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="lasso",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_universal_approximation_theorem1(
@@ -227,8 +219,8 @@ def mlp_universal_approximation_theorem1(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Single hidden layer MLP based on Universal Approximation Theorem.
 
     Args:
@@ -236,13 +228,12 @@ def mlp_universal_approximation_theorem1(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(10,),
         activation="relu",
@@ -251,16 +242,16 @@ def mlp_universal_approximation_theorem1(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_uat_1",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_uat_1",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_universal_approximation_theorem2(
@@ -268,8 +259,8 @@ def mlp_universal_approximation_theorem2(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Multi-layer perceptron with 100 hidden units based on
     Universal Approximation Theorem.
 
@@ -278,13 +269,12 @@ def mlp_universal_approximation_theorem2(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(100,),
         activation="relu",
@@ -293,16 +283,16 @@ def mlp_universal_approximation_theorem2(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_uat_2",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_uat_2",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_universal_approximation_theorem3(
@@ -310,8 +300,8 @@ def mlp_universal_approximation_theorem3(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Multi-layer perceptron with 1000 hidden units based on
     Universal Approximation Theorem.
 
@@ -320,13 +310,12 @@ def mlp_universal_approximation_theorem3(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(1000,),
         activation="relu",
@@ -335,16 +324,16 @@ def mlp_universal_approximation_theorem3(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_uat_3",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_uat_3",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_deep1(
@@ -352,8 +341,8 @@ def mlp_deep1(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Two-layer MLP with 10 units per layer.
 
     Args:
@@ -361,13 +350,12 @@ def mlp_deep1(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(10, 10),
         activation="relu",
@@ -376,16 +364,16 @@ def mlp_deep1(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_deep1",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_deep1",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_deep2(
@@ -393,8 +381,8 @@ def mlp_deep2(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Three-layer MLP with 10, 20, and 10 units respectively.
 
     Args:
@@ -402,13 +390,12 @@ def mlp_deep2(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 10),
         activation="relu",
@@ -417,16 +404,16 @@ def mlp_deep2(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_deep2",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_deep2",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def mlp_deep3(
@@ -434,8 +421,8 @@ def mlp_deep3(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Five-layer MLP with 10, 20, 30, 20, and 10 units respectively.
 
     Args:
@@ -443,13 +430,12 @@ def mlp_deep3(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 30, 20, 10),
         activation="relu",
@@ -458,16 +444,16 @@ def mlp_deep3(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "mlp_deep3",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="mlp_deep3",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def random_forest(
@@ -475,8 +461,8 @@ def random_forest(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Random Forest Regressor.
 
     Args:
@@ -484,26 +470,25 @@ def random_forest(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = RandomForestRegressor(max_depth=3, random_state=random_state)
     model.fit(x_train, y_train)
-    y_predict = model.predict(x_test)
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
+    y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
 
-    return {
-        "model_name": "random_forest",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="random_forest",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def bagging(
@@ -511,8 +496,8 @@ def bagging(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Bagging Regressor using scikit-learn's implementation.
 
     Args:
@@ -520,26 +505,25 @@ def bagging(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = BaggingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "bagging",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="bagging",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def gradient_boosting(
@@ -547,8 +531,8 @@ def gradient_boosting(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Gradient Boosting Regressor using scikit-learn's implementation.
 
     Args:
@@ -556,35 +540,33 @@ def gradient_boosting(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = GradientBoostingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "gradient_boosting",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
-
+    return RegressionResults(
+        model_name="gradient_boosting",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 def adaboost(
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """AdaBoost Regressor using scikit-learn's implementation.
 
     Args:
@@ -592,26 +574,25 @@ def adaboost(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     model = AdaBoostRegressor(n_estimators=100, random_state=random_state)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "adaboost",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="adaboost",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def voting(
@@ -619,8 +600,8 @@ def voting(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Voting Regressor using scikit-learn's implementation.
 
     Args:
@@ -628,13 +609,12 @@ def voting(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     # Define base models for voting
     base_models = [
         ('lr', LinearRegression()),
@@ -644,44 +624,24 @@ def voting(
     model = VotingRegressor(estimators=base_models)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "voting",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
-
-
-# def stacking(x_train, x_test, y_train, y_test, random_state=1):
-#     """
-#     Stacking Regressor
-#     """
-#     model = StackingRegressor()
-#     model.fit(x_train, y_train)
-#     y_predict = model.predict(x_test)
-#     y_test    = y_test.to_numpy()
-
-#     return {
-#         'model_name': 'stacking',
-#         'x_train'   : x_train,
-#         'x_test'    : x_test,
-#         'y_train'   : y_train,
-#         'y_test'    : y_test,
-#         'y_predict' : y_predict,
-#     }
-
+    return RegressionResults(
+        model_name="voting",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 def bayesian_regression1(
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Bayesian Ridge Regression with polynomial features.
 
     Args:
@@ -689,12 +649,10 @@ def bayesian_regression1(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = make_pipeline(
         PolynomialFeatures(degree=10, include_bias=False),
@@ -704,16 +662,16 @@ def bayesian_regression1(
 
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "bayesian_regression",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="bayesian_regression",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def svm_regression(
@@ -721,8 +679,8 @@ def svm_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Support Vector Machine Regressor using scikit-learn's implementation.
 
     Args:
@@ -730,26 +688,24 @@ def svm_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = SVR()
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "svm",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="svm",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def svm_and_scaler_regression(
@@ -757,8 +713,8 @@ def svm_and_scaler_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Support Vector Machine Regressor with standard scaling.
 
     Args:
@@ -766,26 +722,24 @@ def svm_and_scaler_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = make_pipeline(StandardScaler(), SVR())
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "svm_w_s",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="svm_w_s",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression(
@@ -793,36 +747,33 @@ def knn_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """K-Nearest Neighbors Regressor using scikit-learn's implementation.
 
     Args:
         x_train: Training features
         x_test: Test features
         y_train: Training labels
-
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments including random_state
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KNeighborsRegressor()
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "knn",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="knn",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_v2(
@@ -830,8 +781,8 @@ def knn_regression_v2(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """K-Nearest Neighbors Regressor using distance weighting.
 
     Args:
@@ -839,26 +790,24 @@ def knn_regression_v2(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KNeighborsRegressor(weights="distance")
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "knn_v2",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="knn_v2",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_v3(
@@ -866,8 +815,8 @@ def knn_regression_v3(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """KNN regression with 3 neighbors and distance weighting.
 
     Args:
@@ -875,26 +824,24 @@ def knn_regression_v3(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KNeighborsRegressor(n_neighbors=3, weights="distance")
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "knn_v3",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="knn_v3",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_v4(
@@ -902,8 +849,8 @@ def knn_regression_v4(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """KNN regression with 1 neighbor and distance weighting.
 
     Args:
@@ -911,26 +858,24 @@ def knn_regression_v4(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KNeighborsRegressor(n_neighbors=1, weights="distance")
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "knn_v4",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="knn_v4",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_v5_adaptable(
@@ -938,8 +883,8 @@ def knn_regression_v5_adaptable(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Adapt KNN model neighbor count based on training set size.
 
     Use fewer neighbors with small training sets and more neighbors as the
@@ -951,12 +896,10 @@ def knn_regression_v5_adaptable(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     if x_train.shape[0] < 3:
         n_neighbors = 1
@@ -968,16 +911,16 @@ def knn_regression_v5_adaptable(
     model = KNeighborsRegressor(n_neighbors=n_neighbors, weights="distance")
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "knn_v5_adaptable",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="knn_v5_adaptable",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_generic(
@@ -987,7 +930,7 @@ def knn_regression_generic(
     y_test: pd.Series,
     model_name: str,
     knn_kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+) -> RegressionResults:
     """Perform KNN regression with configurable parameters.
 
     Args:
@@ -999,29 +942,26 @@ def knn_regression_generic(
         knn_kwargs: Dict of KNeighborsRegressor parameters
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KNeighborsRegressor(**knn_kwargs)
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": model_name,
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name=model_name,
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def knn_regression_search() -> List[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-        Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[
-            np.float64]]]]]:
+        RegressionResults]]:
     """Generate KNN models with different hyperparameter combinations.
 
     This function creates multiple KNN regressor variants by combining
@@ -1031,16 +971,12 @@ def knn_regression_search() -> List[Callable[
     Returns:
         List[Callable]: List of functions that each implement a
             different KNN regressor variant. Each function takes standard
-
-
-            regression inputs (x_train, x_test, y_train, y_test) and
-            returns a results dictionary.
-
+            regression inputs and returns RegressionResults.
     """
     idx = 0
     knn_fns: List[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-        Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]
+        RegressionResults
     ]] = []
 
     for n_neighbors_val in [1, 2, 3, 5, 7, 9, 11]:
@@ -1049,12 +985,10 @@ def knn_regression_search() -> List[Callable[
                 idx += 1
                 def create_knn(n: int, w: str, p: float, i: int) -> Callable[
                     [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-                    Dict[str, Union[str, pd.DataFrame, pd.Series,
-                        npt.NDArray[np.float64]]]]:
+                    RegressionResults]:
                     def knn_fn(x_train: pd.DataFrame, x_test: pd.DataFrame,
                              y_train: pd.Series, y_test: pd.Series,
-                             random_state: int = 1) -> Dict[str, Union[str,
-                             pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+                             random_state: int = 1) -> RegressionResults:
                         return knn_regression_generic(
                             x_train,
                             x_test,
@@ -1078,8 +1012,8 @@ def kernel_ridge_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Kernel Ridge regression using scikit-learn implementation.
 
     Args:
@@ -1087,26 +1021,24 @@ def kernel_ridge_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     model = KernelRidge()
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "kernel_ridge",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="kernel_ridge",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def lr_with_polynomial_features_regression(
@@ -1114,9 +1046,8 @@ def lr_with_polynomial_features_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Linear regression with polynomial features transformation.
 
     Args:
@@ -1124,13 +1055,10 @@ def lr_with_polynomial_features_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
         **kwargs: Additional arguments including polynomial degree
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     degree = cast(int, kwargs.get("degree", 2))
 
@@ -1145,16 +1073,16 @@ def lr_with_polynomial_features_regression(
 
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "lr_with_polynomial_features",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="lr_with_polynomial_features",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def spline_regression(
@@ -1162,9 +1090,8 @@ def spline_regression(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Spline regression using scikit-learn implementation.
 
     Args:
@@ -1172,13 +1099,10 @@ def spline_regression(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
         **kwargs: Additional arguments including n_knots and degree
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     # Same defaults as SplineTransformer
     n_knots = cast(int, kwargs.get("degree", 5))
@@ -1195,27 +1119,25 @@ def spline_regression(
     )
     model.fit(x_train, y_train)
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "spline",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="spline",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def baseline_average(
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    y_train
-    : pd.Series,
+    y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Predict the mean value of the training set.
 
     Args:
@@ -1223,27 +1145,24 @@ def baseline_average(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
-        **kwargs: Additional arguments (unused)
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     pred = float(np.mean(y_train))
     y_predict = cast(npt.NDArray[np.float64],
                      np.array([pred for _ in range(len(y_test))]))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "average",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="average",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def baseline_last(
@@ -1251,9 +1170,8 @@ def baseline_last(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Predict using the last training value as sample baseline.
 
     Args:
@@ -1261,27 +1179,24 @@ def baseline_last(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
-        **kwargs: Additional arguments (unused)
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     pred = float(y_train.values[-1]) # Use values instead of iloc
     y_predict = cast(npt.NDArray[np.float64],
         np.array([pred for _ in range(len(y_test))]))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "last",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="last",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def baseline_random(
@@ -1289,9 +1204,8 @@ def baseline_random(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Randomly sample training values as predictions.
 
     Args:
@@ -1299,31 +1213,28 @@ def baseline_random(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
-        **kwargs: Additional arguments (unused)
+        **kwargs: Additional arguments
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
-
+        RegressionResults containing model predictions and metadata
     """
+    random_state = kwargs.get('random_state', 1)
     r = random.Random(random_state)
     y_train_list: list[float] = y_train.values.tolist()
     y_predict = cast(
         npt.NDArray[np.float64],
         np.array([r.choice(y_train_list) for _ in range(len(y_test))])
     )
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "random",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="random",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def baseline_constant(
@@ -1331,9 +1242,8 @@ def baseline_constant(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Predict a constant value.
 
     Args:
@@ -1341,26 +1251,23 @@ def baseline_constant(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
         **kwargs: Additional arguments including constant value
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     pred_val = kwargs["constant_prediction_value"]
     y_predict = cast(npt.NDArray[np.float64], np.full(len(y_test), pred_val))
-    y_test_np = cast(npt.NDArray[np.float64], y_test.to_numpy())
 
-    return {
-        "model_name": "constant_prediction",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test_np),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name="constant_prediction",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def linear_regression_manual_gd(
@@ -1368,9 +1275,8 @@ def linear_regression_manual_gd(
     x_test: pd.DataFrame,
     y_train: pd.Series,
     y_test: pd.Series,
-    random_state: int = 1,
-    **kwargs: Dict[str, Any]
-) -> Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]:
+    **kwargs
+) -> RegressionResults:
     """Linear regression using manual gradient descent steps.
 
     Args:
@@ -1378,40 +1284,20 @@ def linear_regression_manual_gd(
         x_test: Test features
         y_train: Training labels
         y_test: Test labels
-        random_state: Random seed for reproducibility
         **kwargs: Additional arguments including:
             steps: Number of gradient descent steps (default: 2)
             learning_rate: Step size for gradient descent (default: 0.01)
 
     Returns:
-        dict: Results dictionary containing model name, input data and
-            predictions
-
+        RegressionResults containing model predictions and metadata
     """
     steps = cast(int, kwargs.get("steps", 2))
     learning_rate = cast(float, kwargs.get("learning_rate", 0.01))
 
-    # Convert to numpy arrays if they aren't already
-    x_train_np = cast(npt.NDArray[np.float64], (
-        x_train.to_numpy()
-        if hasattr(x_train, "to_numpy")
-        else np.array(x_train)
-    ))
-    y_train_np = cast(npt.NDArray[np.float64], (
-        y_train.to_numpy()
-        if hasattr(y_train, "to_numpy")
-        else np.array(y_train)
-    ))
-    x_test_np = cast(npt.NDArray[np.float64], (
-        x_test.to_numpy()
-        if hasattr(x_test, "to_numpy")
-        else np.array(x_test)
-    ))
-    # y_test_np = cast(npt.NDArray[np.float64], (
-    #     y_test.to_numpy()
-    #     if hasattr(y_test, "to_numpy")
-    #     else np.array(y_test)
-    # ))
+    # Convert to numpy arrays
+    x_train_np = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y_train_np = cast(npt.NDArray[np.float64], y_train.to_numpy())
+    x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
     # Initialize parameters (weights and bias)
     n_features = x_train_np.shape[1]
@@ -1435,14 +1321,15 @@ def linear_regression_manual_gd(
     # Make predictions on test set
     y_predict = cast(npt.NDArray[np.float64], np.dot(x_test_np, weights) + bias)
 
-    return {
-        "model_name": f"linear_regression_gd_{steps}_steps",
-        "x_train": x_train,
-        "x_test": x_test,
-        "y_train": y_train,
-        "y_test": pd.Series(y_test),
-        "y_predict": y_predict,
-    }
+    return RegressionResults(
+        model_name=f"linear_regression_gd_{steps}_steps",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_predict,
+        intermediates=None
+    )
 
 
 def create_linear_regression_gd_variants(
@@ -1454,38 +1341,23 @@ def create_linear_regression_gd_variants(
     lr_schedules: List[str] = ["constant", "linear_decay", "exponential_decay"]
 ) -> List[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-        Dict[str, Union[str, pd.DataFrame, pd.Series,
-             npt.NDArray[np.float64]]]]]:
+        RegressionResults]]:
     """Create multiple variants of linear regression with gradient descent.
 
     Args:
-        steps_options (List[int]): List of gradient descent step counts to try
-        learning_rates (List[float]): List of learning rates to try
-        init_weights_options (List[str]): List of weight initialization
-            strategies to try. Options: "zeros", "ones", "random",
-            "random_uniform"
-        momentum_values (List[float]): List of momentum values to try. 0.0
-            means no momentum
-        lr_schedules (List[str]): List of learning rate schedule strategies
-            to try. Options: "constant", "linear_decay", "exponential_decay"
+        steps_options: List of gradient descent step counts to try
+        learning_rates: List of learning rates to try
+        init_weights_options: List of weight initialization strategies
+        momentum_values: List of momentum values to try
+        lr_schedules: List of learning rate schedule strategies
 
     Returns:
-        List[Callable]: List of functions, each implementing linear regression
-            with specific hyperparameter combinations. Each function takes
-
-            the following arguments:
-                x_train (pd.DataFrame): Training features
-                x_test (pd.DataFrame): Test features
-                y_train (pd.Series): Training labels
-                y_test (pd.Series): Test labels
-                random_state (int): Random seed
-            And returns a dict with model results
-
+        List[Callable]: List of functions implementing linear regression
+        with different hyperparameter combinations
     """
     variants: List[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-        Dict[str, Union[str, pd.DataFrame, pd.Series,
-                       npt.NDArray[np.float64]]]]] = []
+        RegressionResults]] = []
 
     # Create all combinations of hyperparameters
     configs: List[Dict[str, Union[int, float, str]]] = []
@@ -1512,8 +1384,7 @@ def create_linear_regression_gd_variants(
         lr_schedule: str
     ) -> Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-        Dict[str, Union[str, pd.DataFrame, pd.Series,
-             npt.NDArray[np.float64]]]]:
+        RegressionResults]:
 
         def linear_regression_gd(
                     x_train: pd.DataFrame,
@@ -1521,21 +1392,14 @@ def create_linear_regression_gd_variants(
                     y_train: pd.Series,
                     y_test: pd.Series,
                     random_state: int = 1
-                ) -> Dict[str, Union[str, pd.DataFrame, pd.Series,
-                                   npt.NDArray[np.float64]]]:
+                ) -> RegressionResults:
                     # Convert to numpy arrays
                     x_train_np = cast(npt.NDArray[np.float64],
-                        x_train.to_numpy() if hasattr(x_train, "to_numpy")
-                        else np.array(x_train))
+                        x_train.to_numpy())
                     y_train_np = cast(npt.NDArray[np.float64],
-                        y_train.to_numpy() if hasattr(y_train, "to_numpy")
-                        else np.array(y_train))
+                        y_train.to_numpy())
                     x_test_np = cast(npt.NDArray[np.float64],
-                        x_test.to_numpy() if hasattr(x_test, "to_numpy")
-                        else np.array(x_test))
-                    y_test_np = cast(npt.NDArray[np.float64],
-                        y_test.to_numpy() if hasattr(y_test, "to_numpy")
-                        else np.array(y_test))
+                        x_test.to_numpy())
 
                     # Initialize parameters
                     n_features = x_train_np.shape[1]
@@ -1590,15 +1454,16 @@ def create_linear_regression_gd_variants(
                     y_predict = cast(npt.NDArray[np.float64],
                         np.dot(x_test_np, weights) + bias)
 
-                    return {
-                        "model_name": f"lr_gd_s{steps}_lr{learning_rate}_"
+                    return RegressionResults(
+                        model_name=f"lr_gd_s{steps}_lr{learning_rate}_"
                                     f"i{init_weights}_m{momentum}_sc{lr_schedule}",
-                        "x_train": x_train,
-                        "x_test": x_test,
-                        "y_train": y_train,
-                        "y_test": pd.Series(y_test_np),
-                        "y_predict": y_predict,
-                    }
+                        x_train=x_train,
+                        x_test=x_test,
+                        y_train=y_train,
+                        y_test=y_test,
+                        y_predict=y_predict,
+                        intermediates=None
+                    )
 
         return linear_regression_gd
 

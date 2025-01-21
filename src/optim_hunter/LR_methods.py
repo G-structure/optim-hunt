@@ -1,31 +1,79 @@
 """Implements various linear regression methods with detailed computation tracking."""
-from typing import Dict, List, Optional, Union, cast
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-def solve_ols(
-    y_train: pd.Series,
-    x_train: pd.DataFrame,
+
+@dataclass
+class RegressionResults:
+    """Container for regression method results.
+
+    Attributes:
+        model_name: Identifier for the regression method
+        x_train: Training features
+        x_test: Test features
+        y_train: Training labels
+        y_test: Test labels
+        y_predict: Predicted values for x_test
+        intermediates: Optional dict of intermediate calculations
+
+    """
+    model_name: str
+    x_train: pd.DataFrame
     x_test: pd.DataFrame
-) -> Dict[str, Union[npt.NDArray[np.float64], Dict[str, npt.NDArray[np.float64]]]]:
-    """Perform Ordinary Least Squares (OLS) regression and calculate intermediate
-    results.
+    y_train: pd.Series
+    y_test: pd.Series
+    y_predict: npt.NDArray[np.float64]
+    intermediates: Optional[Dict[str, Any]] = field(default=None)
+
+    def to_dict(self) -> Dict[str, Union[str, pd.DataFrame, pd.Series,
+                                       npt.NDArray[np.float64]]]:
+        """Convert results to dictionary format."""
+        result = {
+            "model_name": self.model_name,
+            "x_train": self.x_train,
+            "x_test": self.x_test,
+            "y_train": self.y_train,
+            "y_test": self.y_test,
+            "y_predict": self.y_predict
+        }
+        if self.intermediates is not None:
+            result["intermediates"] = self.intermediates
+        return result
+
+def solve_ols(
+    x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Perform Ordinary Least Squares (OLS) regression.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
+        x_test: Test features
+        y_train: Training labels
+        y_test: Test labels
+        **kwargs: Additional keyword arguments (unused)
 
     Returns:
-        Dict containing:
-            - intermediates: Dict of intermediate calculations
+        RegressionResults containing:
+            - intermediates: Dict of intermediate calculations including:
                 - Design Matrix (XᵀX)
                 - Pseudoinverse ((XᵀX)^(-1))
                 - Weighted Feature Matrix (Xᵀy)
                 - Weights (w)
-            - prediction: Predicted values for x_test
+            - All standard RegressionResults fields:
+                - model_name: Model identifier string
+                - x_train: Training feature matrix
+                - x_test: Test feature matrix
+                - y_train: Training target values
+                - y_test: Test target values
+                - y_predict: Model predictions on test data
 
     """
     # Convert to numpy arrays for computation
@@ -34,14 +82,8 @@ def solve_ols(
     x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
     # Add bias terms
-    x = np.hstack((
-        np.ones((x.shape[0], 1), dtype=np.float64),
-        x
-    ))
-    x_test_np = np.hstack((
-        np.ones((x_test_np.shape[0], 1), dtype=np.float64),
-        x_test_np
-    ))
+    x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
+    x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
     # Calculate intermediate results
     design_matrix = x.T @ x
@@ -52,60 +94,63 @@ def solve_ols(
     # Calculate prediction
     y_pred = x_test_np @ weights
 
-    # Return intermediate results and prediction
-    return {
-        "intermediates": {
+    return RegressionResults(
+        model_name="ols",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates={
             "Design Matrix (XᵀX)": design_matrix,
             "Pseudoinverse ((XᵀX)^(-1))": pseudoinverse,
             "Weighted Feature Matrix (Xᵀy)": weighted_feature_matrix,
             "Weights (w)": weights
-        },
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform OLS
-ols_results = solve_ols(y_train, x_train)
-
-# Display results
-for key, value in ols_results.items():
-    print(f"{key}:\n{value}\n")
-'''
-
+        }
+    )
 
 def solve_gradient_descent(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
-    x_test: pd.DataFrame,  # Added x_test parameter
-    learning_rate: float = 0.01,
-    max_iterations: int = 1000,
-    tolerance: float = 1e-6
-) -> Dict[str, Union[np.ndarray, List[np.ndarray], float, int, Dict]]:
-    """Perform Gradient Descent for linear regression and calculate intermediate results.
+    x_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Perform Gradient Descent for linear regression.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
         x_test: Test features to predict on
-        learning_rate: The step size used in the weight update (default is 0.01)
-        max_iterations: Maximum number of iterations (default is 1000)
-        tolerance: The convergence threshold for the gradient norm (default is 1e-6)
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            learning_rate: Step size for updates (default 0.01)
+            max_iterations: Max iterations (default 1000)
+            tolerance: Convergence threshold (default 1e-6)
 
     Returns:
-        Dict containing:
-            - intermediates: Dict of intermediate results including:
-                - Initial Weights (w₀)
-                - Gradients (∇L)
-                - Learning Rate (α)
-                - Weight Updates (Δw)
-                - Intermediate Weights
-                - Final Weights (w)
-                - Number of Iterations
-            - prediction: Predicted values for x_test
+        RegressionResults containing:
+            - model_name: Name identifier for the gradient descent method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
+            - intermediates: Dict of intermediate calculations including:
+                - Initial Weights (w₀): Starting weight values
+                - Gradients (∇L): Gradient of loss at each iteration
+                - Learning Rate (α): Step size used for weight updates
+                - Weight Updates (Δw): Changes in weights at each iteration
+                - Intermediate Weights: Weight values after each update
+                - Final Weights (w): Final converged weight values
+                - Number of Iterations: Total iterations until convergence
+
     """
+    # Get keyword args with defaults
+    learning_rate = kwargs.get("learning_rate", 0.01)
+    max_iterations = kwargs.get("max_iterations", 1000)
+    tolerance = kwargs.get("tolerance", 1e-6)
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -120,9 +165,11 @@ def solve_gradient_descent(
     initial_weights = weights.copy()
 
     # Track intermediate results
-    gradients: List[np.ndarray] = []
-    weight_updates: List[np.ndarray] = []
-    intermediate_weights: List[np.ndarray] = [initial_weights.flatten()]
+    gradients: List[npt.NDArray[np.float64]] = []
+    weight_updates: List[npt.NDArray[np.float64]] = []
+    intermediate_weights: List[npt.NDArray[np.float64]] = [initial_weights.flatten()]
+
+    iteration = 0
 
     for iteration in range(max_iterations):
         # Compute predictions and residuals
@@ -146,8 +193,14 @@ def solve_gradient_descent(
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
 
-    return {
-        "intermediates": {
+    return RegressionResults(
+        model_name="gradient_descent",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates={
             "Initial Weights (w₀)": initial_weights.flatten(),
             "Gradients (∇L)": gradients,
             "Learning Rate (α)": learning_rate,
@@ -155,46 +208,44 @@ def solve_gradient_descent(
             "Intermediate Weights (w₁, w₂, ..., wₙ)": intermediate_weights,
             "Final Weights (w)": weights.flatten(),
             "Number of Iterations": iteration + 1
-        },
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform Gradient Descent
-gd_results = solve_gradient_descent(y_train, x_train, learning_rate=0.01, max_iterations=1000, tolerance=1e-6)
-
-# Display results
-print("Initial Weights (w₀):", gd_results["Initial Weights (w₀)"])
-print("Final Weights (w):", gd_results["Final Weights (w)"])
-print("Number of Iterations:", gd_results["Number of Iterations"])
-print("Intermediate Weights (first 5):", gd_results["Intermediate Weights (w₁, w₂, ..., wₙ)"][:5])
-'''
+        }
+    )
 
 def solve_ridge_regression(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    regularization_param: float = 1.0
-) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
-    """Perform Ridge Regression and calculate intermediate results.
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Perform Ridge Regression with regularization.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
         x_test: Test features to predict on
-        regularization_param: The regularization parameter λ (default is 1.0)
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            regularization_param: The regularization parameter λ (default 1.0)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for the ridge regression method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Regularization Term (λI)
-                - Modified Design Matrix (XᵀX + λI)
-                - Pseudoinverse ((XᵀX + λI)^(-1))
-                - Weights (w)
-            - prediction: Predicted values for x_test
+                - Regularization Term (λI): The regularization matrix
+                - Modified Design Matrix (XᵀX + λI): Design matrix with regularization
+                - Pseudoinverse ((XᵀX + λI)^(-1)): Inverse of modified design matrix
+                - Weights (w): Final computed weights
+
     """
+    # Get regularization parameter from kwargs
+    regularization_param = kwargs.get("regularization_param", 1.0)
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -227,57 +278,59 @@ def solve_ridge_regression(
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
 
-    return {
-        "intermediates": {
+    return RegressionResults(
+        model_name="ridge_regression",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates={
             "Regularization Term (λI)": regularization_term,
             "Modified Design Matrix (XᵀX + λI)": modified_design_matrix,
             "Pseudoinverse ((XᵀX + λI)^(-1))": pseudoinverse,
             "Weights (w)": weights.flatten()
-        },
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform Ridge Regression
-ridge_results = solve_ridge_regression(y_train, x_train, regularization_param=1.0)
-
-# Display results
-print("Regularization Term (λI):\n", ridge_results["Regularization Term (λI)"])
-print("Modified Design Matrix (XᵀX + λI):\n", ridge_results["Modified Design Matrix (XᵀX + λI)"])
-print("Pseudoinverse ((XᵀX + λI)^(-1)):\n", ridge_results["Pseudoinverse ((XᵀX + λI)^(-1))"])
-print("Weights (w):\n", ridge_results["Weights (w)"])
-'''
+        }
+    )
 
 def solve_lasso_regression(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    regularization_param: float = 1.0,
-    max_iter: int = 1000,
-    tol: float = 1e-4
-) -> Dict[str, Union[Dict[str, Union[List[float], List[np.ndarray], np.ndarray]],
-                    npt.NDArray[np.float64]]]:
-    """Apply lasso regression using coordinate descent and calculate results.
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Apply lasso regression using coordinate descent.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        regularization_param: The regularization parameter λ (default is 1.0)
-        max_iter: Maximum number of iterations (default is 1000)
-        tol: Convergence tolerance (default is 1e-4)
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            regularization_param: The regularization parameter λ (default is 1.0)
+            max_iter: Maximum number of iterations (default is 1000)
+            tol: Convergence tolerance (default is 1e-4)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for the lasso regression method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Regularization Term (λ||w||₁)
-                - Soft Thresholding Steps
-                - Weights (w)
-            - prediction: Predicted values for x_test
+                - Regularization Term (λ||w||₁): L1 penalty values at each iteration
+                - Soft Thresholding Steps: Weight values after each update
+                - Weights (w): Weight trajectory during optimization
+
     """
+    # Get keyword args with defaults
+    regularization_param = kwargs.get("regularization_param", 1.0)
+    max_iter = kwargs.get("max_iter", 1000)
+    tol = kwargs.get("tol", 1e-4)
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -287,14 +340,14 @@ def solve_lasso_regression(
     x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
     x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Initialize weights (including bias term)
+    # Initialize weights
     weights = np.zeros((x.shape[1], 1), dtype=np.float64)
 
     # Number of samples and features
     n_samples, n_features = x.shape
 
     # Store intermediate results
-    intermediate_results = {
+    intermediate_results: Dict[str, List[Union[float, npt.NDArray[np.float64]]]] = {
         "Regularization Term (λ||w||₁)": [],
         "Soft Thresholding Steps": [],
         "Weights (w)": []
@@ -346,54 +399,58 @@ def solve_lasso_regression(
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform Lasso Regression
-lasso_results = solve_lasso_regression(y_train, x_train, regularization_param=1.0)
-
-# Display results
-print("Regularization Term (λ||w||₁):", lasso_results["Regularization Term (λ||w||₁)"][-1])
-print("Soft Thresholding Steps (last iteration):", lasso_results["Soft Thresholding Steps"][-1])
-print("Final Weights (w):", lasso_results["Weights (w)"])
-'''
+    return RegressionResults(
+        model_name="lasso_regression",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_sgd(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    learning_rate: float = 0.01,
-    max_iter: int = 100,
-    batch_size: int = 1,
-    tol: float = 1e-4,
-    random_state: int = 42
-) -> Dict[str, Union[Dict[str, List[npt.NDArray[np.float64]]], npt.NDArray[np.float64]]]:
-    """Perform Stochastic Gradient Descent (SGD) and calculate intermediate results.
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Perform Stochastic Gradient Descent (SGD) optimization.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        learning_rate: Learning rate (α) for weight updates (default is 0.01)
-        max_iter: Maximum number of iterations (default is 100)
-        batch_size: Size of the mini-batch for each step (default is 1)
-        tol: Convergence tolerance (default is 1e-4)
-        random_state: Random seed for reproducibility (default is 42)
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            learning_rate: Learning rate (α) for weight updates (default is 0.01)
+            max_iter: Maximum number of iterations (default is 100)
+            batch_size: Size of the mini-batch for each step (default is 1)
+            tol: Convergence tolerance (default is 1e-4)
+            random_state: Random seed for reproducibility (default is 42)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for the SGD method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Random Sampling of Data Points
-                - Gradient of Loss for Current Sample (∇L_i)
-                - Intermediate Weights (w₁, w₂, ..., wₙ)
-            - prediction: Predicted values for x_test
+                - Random Sampling of Data Points: Batch indices at each step
+                - Gradient of Loss for Current Sample (∇L_i): Batch gradients
+                - Intermediate Weights (w₁, w₂, ..., wₙ): Weight trajectory
+
     """
+    # Get keyword args with defaults
+    learning_rate = kwargs.get("learning_rate", 0.01)
+    max_iter = kwargs.get("max_iter", 100)
+    batch_size = kwargs.get("batch_size", 1)
+    tol = kwargs.get("tol", 1e-4)
+    random_state = kwargs.get("random_state", 42)
+
     # Set random seed
     np.random.seed(random_state)
 
@@ -413,7 +470,7 @@ def solve_sgd(
     n_samples = x.shape[0]
 
     # Store intermediate results
-    intermediate_results = {
+    intermediate_results: Dict[str, List[npt.NDArray[np.float64]]] = {
         "Random Sampling of Data Points": [],
         "Gradient of Loss for Current Sample (∇L_i)": [],
         "Intermediate Weights (w₁, w₂, ..., wₙ)": []
@@ -442,7 +499,7 @@ def solve_sgd(
 
             # Store intermediate results
             intermediate_results["Random Sampling of Data Points"].append(
-                batch_indices.copy()
+                batch_indices.astype(np.float64)
             )
             intermediate_results["Gradient of Loss for Current Sample (∇L_i)"].append(
                 gradient.flatten()
@@ -458,49 +515,52 @@ def solve_sgd(
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform SGD
-sgd_results = solve_sgd(y_train, x_train, learning_rate=0.01, max_iter=100, batch_size=1)
-
-# Display results
-print("Random Sampling of Data Points (last iteration):", sgd_results["Random Sampling of Data Points"][-1])
-print("Gradient of Loss for Current Sample (last iteration):", sgd_results["Gradient of Loss for Current Sample (∇L_i)"][-1])
-print("Final Weights (w):", sgd_results["Intermediate Weights (w₁, w₂, ..., wₙ)"][-1])
-'''
+    return RegressionResults(
+        model_name="sgd",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_bayesian_linear_regression(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    alpha: float = 1.0,
-    beta: float = 1.0
-) -> Dict[str, Union[Dict[str, Dict[str, Union[npt.NDArray[np.float64], float]]],
-                    npt.NDArray[np.float64]]]:
-    """Perform Bayesian Linear Regression and calculate intermediate results.
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Perform Bayesian Linear Regression with uncertainty quantification.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        alpha: Precision of the prior distribution (default is 1.0)
-        beta: Precision of the likelihood (default is 1.0)
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            alpha: Precision of the prior distribution (default is 1.0)
+            beta: Precision of the likelihood (default is 1.0)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for Bayesian linear regression
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Prior Distribution (P(w)): Mean and covariance of the prior
-                - Likelihood (P(y|X, w)): Precision of the noise
-                - Posterior Mean and Covariance: Updated distribution over weights
-            - prediction: Predicted values for x_test
+                - Prior Distribution (P(w)): Mean and covariance of prior
+                - Likelihood (P(y|X, w)): Precision of noise model
+                - Posterior Mean and Covariance: Updated distribution
+
     """
+    # Get keyword args with defaults
+    alpha = kwargs.get("alpha", 1.0)
+    beta = kwargs.get("beta", 1.0)
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -547,52 +607,46 @@ def solve_bayesian_linear_regression(
         }
     }
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Perform Bayesian Linear Regression
-bayesian_results = solve_bayesian_linear_regression(y_train, x_train, alpha=1.0, beta=1.0)
-
-# Display results
-print("Prior Distribution (P(w)):")
-print("Mean:", bayesian_results["Prior Distribution (P(w))"]["Mean"])
-print("Covariance:", bayesian_results["Prior Distribution (P(w))"]["Covariance"])
-
-print("\nLikelihood (P(y|X, w)):")
-print("Precision (β):", bayesian_results["Likelihood (P(y|X, w))"]["Precision (β)"])
-
-print("\nPosterior Mean and Covariance:")
-print("Mean:", bayesian_results["Posterior Mean and Covariance"]["Mean"])
-print("Covariance:", bayesian_results["Posterior Mean and Covariance"]["Covariance"])
-
-'''
+    return RegressionResults(
+        model_name="bayesian_linear_regression",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_normal_equation(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
-    x_test: pd.DataFrame
-) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
-    """Solve linear regression using the Normal Equation and compute intermediate results.
+    x_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Solve linear regression using the Normal Equation method.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments (unused)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for normal equation method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Transpose of X (Xᵀ)
-                - Design Matrix (XᵀX)
-                - Weighted Feature Matrix (Xᵀy)
-                - Weights (w)
-            - prediction: Predicted values for x_test
+                - Transpose of X (Xᵀ): Transposed feature matrix
+                - Design Matrix (XᵀX): Core matrix for normal equation
+                - Weighted Feature Matrix (Xᵀy): Target-weighted features
+                - Weights (w): Final computed regression coefficients
+
     """
     # Convert input data to numpy arrays for matrix computations
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
@@ -622,56 +676,51 @@ def solve_normal_equation(
         "Weights (w)": weights.flatten()
     }
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
+    return RegressionResults(
+        model_name="normal_equation",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Solve using the Normal Equation
-normal_equation_results = solve_normal_equation(y_train, x_train)
-
-# Display intermediate results
-print("Transpose of X (Xᵀ):")
-print(normal_equation_results["Transpose of X (Xᵀ)"])
-
-print("\nDesign Matrix (XᵀX):")
-print(normal_equation_results["Design Matrix (XᵀX)"])
-
-print("\nWeighted Feature Matrix (Xᵀy):")
-print(normal_equation_results["Weighted Feature Matrix (Xᵀy)"])
-
-print("\nWeights (w):")
-print(normal_equation_results["Weights (w)"])
-
-'''
-
-def solve_ridge_regression(
-    y_train: pd.Series,
+def solve_ridge_regression_closed_form(  # Renamed to be more specific
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    lambda_reg: float = 1.0
-) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
-    """Solve Ridge Regression using closed-form solution and compute intermediate results.
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
+    """Solve Ridge Regression using direct closed-form solution.
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        lambda_reg: Regularization parameter (λ). Default is 1.0
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            lambda_reg: Regularization parameter (λ). Default is 1.0
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for closed-form ridge regression
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Regularization Term (λI)
-                - Modified Design Matrix (XᵀX + λI)
-                - Weighted Feature Matrix (Xᵀy)
-                - Weights (w)
-            - prediction: Predicted values for x_test
+                - Regularization Term (λI): L2 penalty matrix
+                - Modified Design Matrix (XᵀX + λI): Regularized design matrix
+                - Weighted Feature Matrix (Xᵀy): Target-weighted features
+                - Weights (w): Final regularized coefficients
+
     """
+    # Get regularization parameter from kwargs
+    lambda_reg = kwargs.get("lambda_reg", 1.0)
+
     # Convert input data to numpy arrays for matrix computations
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -710,60 +759,53 @@ def solve_ridge_regression(
         "Weights (w)": weights.flatten()
     }
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Solve using Ridge Regression
-ridge_results = solve_ridge_regression(y_train, x_train, lambda_reg=0.5)
-
-# Display intermediate results
-print("Regularization Term (λI):")
-print(ridge_results["Regularization Term (λI)"])
-
-print("\nModified Design Matrix (XᵀX + λI):")
-print(ridge_results["Modified Design Matrix (XᵀX + λI)"])
-
-print("\nWeighted Feature Matrix (Xᵀy):")
-print(ridge_results["Weighted Feature Matrix (Xᵀy)"])
-
-print("\nWeights (w):")
-print(ridge_results["Weights (w)"])
-
-'''
+    return RegressionResults(
+        model_name="ridge_regression_closed_form",  # Updated name
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_irls(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    max_iter: int = 100,
-    tol: float = 1e-6
-) -> Dict[str, Union[Dict[str, Union[List[npt.NDArray[np.float64]],
-                                   npt.NDArray[np.float64]]],
-                    npt.NDArray[np.float64]]]:
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
     """Solve regression using Iterative Reweighted Least Squares (IRLS).
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        max_iter: Maximum number of iterations for convergence (default is 100)
-        tol: Tolerance for convergence (default is 1e-6)
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            max_iter: Maximum iterations for convergence (default is 100)
+            tol: Tolerance for convergence (default is 1e-6)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for IRLS method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
-                - Hessian Matrix (H): Second derivative of loss function
-                - Gradient of Loss (∇L): Gradient of loss function
-                - Weight Updates (Δw): Changes in weights
-                - Final Weights (w): Final regression coefficients
-            - prediction: Predicted values for x_test
+                - Hessian Matrices (H): Second derivatives at each iteration
+                - Gradients of Loss (∇L): Loss gradients at each iteration
+                - Weight Updates (Δw): Parameter updates at each iteration
+                - Final Weights (w): Converged model parameters
+
     """
+    # Get keyword args with defaults
+    max_iter = kwargs.get("max_iter", 100)
+    tol = kwargs.get("tol", 1e-6)
+
     # Convert input data to numpy arrays
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -816,7 +858,7 @@ def solve_irls(
     # Calculate prediction for test data
     y_pred = x_test_np @ w
 
-    # Store results
+    # Store intermediate results
     intermediate_results: Dict[str, Union[List[npt.NDArray[np.float64]],
                                         npt.NDArray[np.float64]]] = {
         "Hessian Matrices (H)": hessian_matrices,
@@ -825,57 +867,52 @@ def solve_irls(
         "Final Weights (w)": w.flatten()
     }
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
-
-'''Example usage:
-# Load dataset
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Solve using IRLS
-irls_results = solve_irls(y_train, x_train)
-
-# Display intermediate results
-print("Hessian Matrix (H) at last iteration:")
-print(irls_results["Hessian Matrices (H)"][-1])
-
-print("\nGradient of Loss (∇L) at last iteration:")
-print(irls_results["Gradients of Loss (∇L)"][-1])
-
-print("\nWeight Updates (Δw) at last iteration:")
-print(irls_results["Weight Updates (Δw)"][-1])
-
-print("\nFinal Weights (w):")
-print(irls_results["Final Weights (w)"])
-
-'''
+    return RegressionResults(
+        model_name="irls",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_pcr(
-    y_train: pd.Series,
     x_train: pd.DataFrame,
     x_test: pd.DataFrame,
-    n_components: Optional[int] = None
-) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
     """Solve regression using Principal Component Regression (PCR).
 
     Args:
-        y_train: Training labels (target values)
         x_train: Training features
-        x_test: Test features to predict on
-        n_components: Number of principal components to retain. If None, all
-            components are retained. Default is None
+        x_test: Test features
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword arguments like:
+            n_components: Number of principal components to retain (default is None)
+                If None, all components are retained.
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for PCR method
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
                 - Principal Components: Eigenvectors of covariance matrix
-                - Explained Variance: Variance explained by components
+                - Explained Variance: Variance explained by each component
                 - Transformed Data (PCs): Data projected onto components
                 - Weights (w): Final regression coefficients
-            - prediction: Predicted values for x_test
+
     """
+    # Get number of components from kwargs
+    n_components = kwargs.get("n_components", None)
+
     # Convert input data to numpy arrays
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -933,98 +970,91 @@ def solve_pcr(
         "Weights (w)": w.flatten()
     }
 
-    return {
-        "intermediates": intermediate_results,
-        "prediction": y_pred.flatten()
-    }
+    # Include number of components in model name if specified
+    model_name = (f"pcr_{n_components}_components"
+                 if n_components is not None
+                 else "pcr_all_components")
 
-'''Example usage:
-x_train, y_train, x_test, y_test = get_dataset_friedman_1()
-
-# Solve using PCR (retain top 5 principal components)
-pcr_results = solve_pcr(y_train, x_train, n_components=5)
-
-# Display intermediate results
-print("Principal Components:")
-print(pcr_results["Principal Components"])
-
-print("\nExplained Variance:")
-print(pcr_results["Explained Variance"])
-
-print("\nTransformed Data (first 5 rows):")
-print(pcr_results["Transformed Data (PCs)"][:5])
-
-print("\nWeights (w):")
-print(pcr_results["Weights (w)"])
-
-'''
-
-
+    return RegressionResults(
+        model_name=model_name,
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred.flatten(),
+        intermediates=intermediate_results
+    )
 
 def solve_knn(
-    X_train: npt.NDArray[np.float64],
-    y_train: npt.NDArray[np.float64],
-    X_test: npt.NDArray[np.float64],
-    k: int
-) -> Dict[str, Union[Dict[str, npt.NDArray[np.float64]], npt.NDArray[np.float64]]]:
+    x_train: pd.DataFrame,
+    x_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    **kwargs: Any
+) -> RegressionResults:
     """Solve regression using K-Nearest Neighbors (KNN).
 
     Args:
-        X_train: Training features array
-        y_train: Training labels array
-        X_test: Test features array
-        k: Number of nearest neighbors
+        x_train: Training features
+        x_test: Test features to predict on
+        y_train: Training labels (target values)
+        y_test: Test labels
+        **kwargs: Additional keyword args with defaults:
+            k: Number of nearest neighbors (default is 5)
 
     Returns:
-        Dict containing:
+        RegressionResults containing:
+            - model_name: Name identifier for KNN method with k value
+            - x_train: Training features matrix provided as input
+            - x_test: Test features matrix provided as input
+            - y_train: Training target values provided as input
+            - y_test: Test target values provided as input
+            - y_predict: Model's predicted values for x_test
             - intermediates: Dict of intermediate calculations including:
                 - Distances (D): Distance matrix between test and training points
                 - Neighbor Indices (I): Indices of k-nearest neighbors
                 - Neighbor Labels (L): Labels of k-nearest neighbors
-            - prediction: Predicted values for X_test
 
     """
+    # Get k from kwargs with default
+    k = kwargs.get("k", 5)
+
+    # Convert input data to numpy arrays
+    X_train = cast(npt.NDArray[np.float64], x_train.to_numpy())
+    y_train_np = cast(npt.NDArray[np.float64], y_train.to_numpy())
+    X_test = cast(npt.NDArray[np.float64], x_test.to_numpy())
+
     num_test = X_test.shape[0]
     num_train = X_train.shape[0]
 
     # 1. Distance Calculation
-    distances = np.zeros((num_test, num_train))
+    distances = np.zeros((num_test, num_train), dtype=np.float64)
     for i in range(num_test):
         for j in range(num_train):
             distances[i, j] = np.linalg.norm(X_test[i] - X_train[j])
 
     # 2. Neighbor Identification
     neighbor_indices = np.argsort(distances, axis=1)[:, :k]
-    neighbor_labels = y_train[neighbor_indices]
+    neighbor_labels = y_train_np[neighbor_indices]
 
-    # 3. Classification
-    y_pred = np.zeros(num_test)
+    # 3. Regression (using mean instead of mode for regression)
+    y_pred = np.zeros(num_test, dtype=np.float64)
     for i in range(num_test):
-        unique, counts = np.unique(neighbor_labels[i], return_counts=True)
-        y_pred[i] = unique[np.argmax(counts)]
+        y_pred[i] = np.mean(neighbor_labels[i])
 
-    return {
-        "intermediates": {
-            "Distances (D)": distances,
-            "Neighbor Indices (I)": neighbor_indices,
-            "Neighbor Labels (L)": neighbor_labels
-        },
-        "prediction": y_pred
+    # Store intermediate results
+    intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
+        "Distances (D)": distances,
+        "Neighbor Indices (I)": neighbor_indices.astype(np.float64),  # Convert to float64
+        "Neighbor Labels (L)": neighbor_labels
     }
-''' Example usage:
-x_train, y_train, x_test, y_test = get_dataset_friedman_1(random_state=1)
 
-# Set the number of neighbors
-k = 5
-
-# Run KNN and get intermediate results
-knn_results = solve_knn(X_train, y_train, X_test, k)
-
-# Access intermediate results
-distances = knn_results["Distances (D)"]
-neighbor_indices = knn_results["Neighbor Indices (I)"]
-neighbor_labels = knn_results["Neighbor Labels (L)"]
-predicted_labels = knn_results["Predicted Labels (y_pred)"]
-
-
-'''
+    return RegressionResults(
+        model_name=f"knn_{k}_neighbors",
+        x_train=x_train,
+        x_test=x_test,
+        y_train=y_train,
+        y_test=y_test,
+        y_predict=y_pred,
+        intermediates=intermediate_results
+    )
