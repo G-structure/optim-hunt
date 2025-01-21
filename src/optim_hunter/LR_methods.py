@@ -281,10 +281,21 @@ def solve_gradient_descent(
         if np.linalg.norm(gradient) < tolerance:
             break
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="gradient_descent",
         x_train=x_train,
         x_test=x_test,
@@ -301,6 +312,19 @@ def solve_gradient_descent(
             "Number of Iterations": iteration + 1
         }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    # Add convergence info
+    results.add_convergence_info(
+        n_iter=iteration + 1,
+        tolerance=np.linalg.norm(gradient),
+        converged=(np.linalg.norm(gradient) < tolerance)
+    )
+
+    return results
 
 def solve_ridge_regression(
     x_train: pd.DataFrame,
@@ -366,10 +390,21 @@ def solve_ridge_regression(
     # Compute the weights (w = (XᵀX + λI)^(-1)Xᵀy)
     weights = pseudoinverse @ weighted_feature_matrix
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="ridge_regression",
         x_train=x_train,
         x_test=x_test,
@@ -383,6 +418,12 @@ def solve_ridge_regression(
             "Weights (w)": weights.flatten()
         }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_lasso_regression(
     x_train: pd.DataFrame,
@@ -490,10 +531,21 @@ def solve_lasso_regression(
         if np.linalg.norm(weights - weights_prev, ord=1) < tol:
             break
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="lasso_regression",
         x_train=x_train,
         x_test=x_test,
@@ -502,6 +554,19 @@ def solve_lasso_regression(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    # Add convergence info
+    results.add_convergence_info(
+        n_iter=iteration + 1,
+        tolerance=np.linalg.norm(weights - weights_prev, ord=1),
+        converged=(np.linalg.norm(weights - weights_prev, ord=1) < tol)
+    )
+
+    return results
 
 def solve_sgd(
     x_train: pd.DataFrame,
@@ -606,10 +671,21 @@ def solve_sgd(
         if np.linalg.norm(gradient, ord=2) < tol:
             break
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="sgd",
         x_train=x_train,
         x_test=x_test,
@@ -618,6 +694,19 @@ def solve_sgd(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+    
+    # Add convergence info
+    results.add_convergence_info(
+        n_iter=iteration + 1,
+        tolerance=np.linalg.norm(gradient, ord=2),
+        converged=(np.linalg.norm(gradient, ord=2) < tol)
+    )
+
+    return results
 
 def solve_bayesian_linear_regression(
     x_train: pd.DataFrame,
