@@ -873,8 +873,18 @@ def solve_ridge_regression_closed_form(  # Renamed to be more specific
     # Compute the weights using the Ridge Regression closed-form solution
     weights = np.linalg.inv(modified_design_matrix) @ weighted_feature_matrix
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
     # Store intermediate results
     intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
@@ -884,7 +894,8 @@ def solve_ridge_regression_closed_form(  # Renamed to be more specific
         "Weights (w)": weights.flatten()
     }
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="ridge_regression_closed_form",  # Updated name
         x_train=x_train,
         x_test=x_test,
@@ -893,6 +904,12 @@ def solve_ridge_regression_closed_form(  # Renamed to be more specific
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_irls(
     x_train: pd.DataFrame,
@@ -980,8 +997,18 @@ def solve_irls(
             print(f"Converged in {iteration + 1} iterations.")
             break
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ w
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ w
+    predict_time = time.time() - start_predict
 
     # Store intermediate results
     intermediate_results: Dict[str, Union[List[npt.NDArray[np.float64]],
@@ -992,7 +1019,8 @@ def solve_irls(
         "Final Weights (w)": w.flatten()
     }
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="irls",
         x_train=x_train,
         x_test=x_test,
@@ -1001,6 +1029,12 @@ def solve_irls(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_pcr(
     x_train: pd.DataFrame,
@@ -1084,8 +1118,18 @@ def solve_pcr(
     w = np.linalg.inv(transformed_train_with_bias.T @ transformed_train_with_bias) @ \
         (transformed_train_with_bias.T @ y)
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction using transformed test data
     y_pred = transformed_test_with_bias @ w
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = transformed_test_with_bias @ w
+    predict_time = time.time() - start_predict
 
     # Store intermediate results
     intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
@@ -1100,7 +1144,8 @@ def solve_pcr(
                  if n_components is not None
                  else "pcr_all_components")
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name=model_name,
         x_train=x_train,
         x_test=x_test,
@@ -1109,6 +1154,12 @@ def solve_pcr(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_knn(
     x_train: pd.DataFrame,
