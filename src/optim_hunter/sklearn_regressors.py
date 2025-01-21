@@ -1718,19 +1718,35 @@ def baseline_average(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     pred = float(np.mean(y_train))
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64],
                      np.array([pred for _ in range(len(y_test))]))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="average",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={"mean_value": pred}
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def baseline_last(
