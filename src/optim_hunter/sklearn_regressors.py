@@ -2117,11 +2117,46 @@ def create_linear_regression_gd_variants(
                             weights = weights - current_lr * dw
                             bias = bias - current_lr * db
 
-                    # Make predictions
+                    # Start timing
+                    start_fit = time.time()
+                    
+                    # Initialize parameters
+                    n_features = x_train_np.shape[1]
+                    np.random.seed(random_state)
+
+                    # Track intermediate values
+                    weight_history = []
+                    bias_history = []
+                    gradient_history = []
+                    lr_history = []
+
+                    if init_weights == "zeros":
+                        weights = np.zeros(n_features)
+                    elif init_weights == "ones":
+                        weights = np.ones(n_features)
+                    elif init_weights == "random":
+                        weights = np.random.randn(n_features) * 0.01
+                    else: # random_uniform
+                        weights = np.random.uniform(-0.01, 0.01, n_features)
+
+                    bias = 0.0
+                    weight_history.append(weights.copy())
+                    bias_history.append(bias)
+
+                    # Initialize momentum vectors
+                    v_weights = np.zeros_like(weights)
+                    v_bias = 0.0
+
+                    fit_time = time.time() - start_fit
+
+                    # Prediction timing
+                    start_predict = time.time()
                     y_predict = cast(npt.NDArray[np.float64],
                         np.dot(x_test_np, weights) + bias)
+                    predict_time = time.time() - start_predict
 
-                    return RegressionResults(
+                    # Create results
+                    results = RegressionResults(
                         model_name=f"lr_gd_s{steps}_lr{learning_rate}_"
                                     f"i{init_weights}_m{momentum}_sc{lr_schedule}",
                         x_train=x_train,
@@ -2129,8 +2164,22 @@ def create_linear_regression_gd_variants(
                         y_train=y_train,
                         y_test=y_test,
                         y_predict=y_predict,
-                        intermediates=None
+                        intermediates={
+                            "weight_history": weight_history,
+                            "bias_history": bias_history,
+                            "gradient_history": gradient_history,
+                            "learning_rate_history": lr_history,
+                            "momentum": momentum,
+                            "schedule": lr_schedule,
+                            "init_method": init_weights
+                        }
                     )
+
+                    # Add metadata
+                    results.add_timing(fit_time, predict_time)
+                    results.compute_performance_metrics()
+
+                    return results
 
         return linear_regression_gd
 
