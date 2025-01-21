@@ -1486,7 +1486,9 @@ def knn_regression_search() -> List[Callable[
                             }
                         )
                         
-                        # Add search parameters to intermediates
+                        fit_time = time.time() - start_fit
+                        
+                        # Add search parameters and timing to intermediates
                         if results.intermediates is None:
                             results.intermediates = {}
                         results.intermediates.update({
@@ -1495,8 +1497,14 @@ def knn_regression_search() -> List[Callable[
                                 "n_neighbors": n,
                                 "weights": w,
                                 "p": p
+                            },
+                            "timing": {
+                                "fit_time": fit_time
                             }
                         })
+                        
+                        # Add metadata
+                        results.compute_performance_metrics()
                         
                         return results
                     return knn_fn
