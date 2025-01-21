@@ -1,4 +1,5 @@
 """Implements various linear regression methods with detailed computation tracking."""
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union, cast
 
@@ -213,6 +214,9 @@ def solve_gradient_descent(
                 - Number of Iterations: Total iterations until convergence
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get keyword args with defaults
     learning_rate = kwargs.get("learning_rate", 0.01)
     max_iterations = kwargs.get("max_iterations", 1000)
