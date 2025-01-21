@@ -8,6 +8,7 @@ Source: # Source https://github.com/robertvacareanu/llm4regression/blob/37b98e60
 
 """
 
+import time
 import random
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 import numpy as np
@@ -79,6 +80,9 @@ def create_llm_regressor(
         # Prepare prompt from training data and test input
         prompt = prepare_prompt(x_train, y_train, x_test)
 
+        # Start timing
+        start_fit = time.time()
+
         # Generate prediction
         pred_text = str(model.generate(
             prompt,
@@ -86,6 +90,11 @@ def create_llm_regressor(
             temperature=temperature
         ))
 
+        fit_time = time.time() - start_fit
+    
+        # Prediction timing
+        start_predict = time.time()
+    
         try:
             # Extract generated value and convert to float
             generated_part = str(pred_text.replace(prompt, "").strip())
@@ -96,8 +105,11 @@ def create_llm_regressor(
 
         # Convert prediction to numpy array
         y_pred = np.array([y_predict], dtype=np.float64)
+    
+        predict_time = time.time() - start_predict
 
-        return RegressionResults(
+        # Create results object
+        results = RegressionResults(
             model_name=f"llm-{model_name}",
             x_train=x_train,
             x_test=x_test,
@@ -106,6 +118,15 @@ def create_llm_regressor(
             y_predict=y_pred,
             intermediates=None  # No intermediate results for LLM
         )
+
+        # Add metadata
+        results.add_timing(fit_time, predict_time)
+        results.compute_performance_metrics()
+
+        if np.isnan(y_predict):
+            results.add_warning("Failed to parse model prediction")
+
+        return results
 
     return llm_regressor
 
