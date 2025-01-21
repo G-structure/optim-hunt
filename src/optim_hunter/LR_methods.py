@@ -159,10 +159,24 @@ def solve_ols(
     weighted_feature_matrix = x.T @ y
     weights = pseudoinverse @ weighted_feature_matrix
 
-    # Calculate prediction
+    # Start timing
+    start_fit = time.time()
+    
+    # Calculate intermediate matrices
+    design_matrix = x.T @ x
+    pseudoinverse = np.linalg.inv(design_matrix)
+    weighted_feature_matrix = x.T @ y
+    weights = pseudoinverse @ weighted_feature_matrix
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="ols",
         x_train=x_train,
         x_test=x_test,
@@ -176,6 +190,12 @@ def solve_ols(
             "Weights (w)": weights
         }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_gradient_descent(
     x_train: pd.DataFrame,
