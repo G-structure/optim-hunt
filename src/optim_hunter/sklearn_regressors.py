@@ -201,11 +201,22 @@ def ridge(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = Ridge(random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="ridge",
         x_train=x_train,
         x_test=x_test,
@@ -214,6 +225,12 @@ def ridge(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def lasso(
@@ -236,11 +253,22 @@ def lasso(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = Lasso(random_state=random_state)
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="lasso",
         x_train=x_train,
         x_test=x_test,
@@ -249,6 +277,12 @@ def lasso(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def mlp_universal_approximation_theorem1(
@@ -271,6 +305,10 @@ def mlp_universal_approximation_theorem1(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
+    
+    # Start timing
+    start_fit = time.time()
+    
     model = MLPRegressor(
         hidden_layer_sizes=(10,),
         activation="relu",
@@ -278,9 +316,16 @@ def mlp_universal_approximation_theorem1(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="mlp_uat_1",
         x_train=x_train,
         x_test=x_test,
@@ -289,6 +334,12 @@ def mlp_universal_approximation_theorem1(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def mlp_universal_approximation_theorem2(
