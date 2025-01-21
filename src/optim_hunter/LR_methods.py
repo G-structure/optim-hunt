@@ -153,12 +153,6 @@ def solve_ols(
     x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
     x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Calculate intermediate results
-    design_matrix = x.T @ x
-    pseudoinverse = np.linalg.inv(design_matrix)
-    weighted_feature_matrix = x.T @ y
-    weights = pseudoinverse @ weighted_feature_matrix
-
     # Start timing
     start_fit = time.time()
     
@@ -190,6 +184,12 @@ def solve_ols(
             "Weights (w)": weights
         }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
     # Add metadata
     results.add_timing(fit_time, predict_time)
