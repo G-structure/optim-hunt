@@ -1218,14 +1218,28 @@ def solve_knn(
     for i in range(num_test):
         y_pred[i] = np.mean(neighbor_labels[i])
 
+    # Start timing
+    start_fit = time.time()
+    
     # Store intermediate results
     intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
         "Distances (D)": distances,
         "Neighbor Indices (I)": neighbor_indices.astype(np.float64),  # Convert to float64
-        "Neighbor Labels (L)": neighbor_labels
+        "Neighbor Labels (L)": neighbor_labels,
+        "k_neighbors": np.array([k], dtype=np.float64)
     }
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = np.zeros(num_test, dtype=np.float64)
+    for i in range(num_test):
+        y_pred[i] = np.mean(neighbor_labels[i])
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name=f"knn_{k}_neighbors",
         x_train=x_train,
         x_test=x_test,
@@ -1234,3 +1248,9 @@ def solve_knn(
         y_predict=y_pred,
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
