@@ -150,11 +150,21 @@ def linear_regression(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     model = LinearRegression()
     model.fit(x_train, y_train)
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="linear_regression",
         x_train=x_train,
         x_test=x_test,
@@ -163,6 +173,12 @@ def linear_regression(
         y_predict=y_predict,
         intermediates=None
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def ridge(
