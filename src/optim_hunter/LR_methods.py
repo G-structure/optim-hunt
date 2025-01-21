@@ -773,8 +773,18 @@ def solve_normal_equation(
     # Compute the weights using the Normal Equation
     weights = np.linalg.inv(design_matrix) @ weighted_feature_matrix
 
+    # Start timing
+    start_fit = time.time()
+    
     # Calculate prediction for test data
     y_pred = x_test_np @ weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
+    y_pred = x_test_np @ weights
+    predict_time = time.time() - start_predict
 
     # Store intermediate results
     intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
@@ -784,7 +794,8 @@ def solve_normal_equation(
         "Weights (w)": weights.flatten()
     }
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="normal_equation",
         x_train=x_train,
         x_test=x_test,
@@ -793,6 +804,12 @@ def solve_normal_equation(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_ridge_regression_closed_form(  # Renamed to be more specific
     x_train: pd.DataFrame,
