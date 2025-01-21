@@ -6,10 +6,9 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-
 @dataclass
 class RegressionResults:
-    """Container for regression method results.
+    """Container for regression method results and metadata.
 
     Attributes:
         model_name: Identifier for the regression method
@@ -19,7 +18,22 @@ class RegressionResults:
         y_test: Test labels
         y_predict: Predicted values for x_test
         intermediates: Optional dict of intermediate calculations
-
+        metadata: Optional dict containing:
+            - convergence_info: Dict containing:
+                - n_iterations: Number of iterations until convergence
+                - final_tolerance: Final convergence metric value
+                - converged: Boolean indicating if convergence was reached
+            - timing_info: Dict containing:
+                - fit_time: Time taken for model fitting
+                - predict_time: Time taken for prediction
+                - total_time: Total computation time
+            - performance_metrics: Dict containing:
+                - train_score: Score on training data
+                - test_score: Score on test data
+                - residuals: Prediction residuals
+                - r2_score: R-squared score
+                - mse: Mean squared error
+            - warnings: List of any warnings encountered
     """
     model_name: str
     x_train: pd.DataFrame
@@ -28,6 +42,59 @@ class RegressionResults:
     y_test: pd.Series
     y_predict: npt.NDArray[np.float64]
     intermediates: Optional[Dict[str, Any]] = field(default=None)
+    metadata: Optional[Dict[str, Any]] = field(default_factory=lambda: {
+        "convergence_info": {},
+        "timing_info": {},
+        "performance_metrics": {},
+        "warnings": []
+    })
+
+    def add_timing(self, fit_time: float, predict_time: float) -> None:
+        """Add timing information to metadata."""
+        self.metadata["timing_info"].update({
+            "fit_time": fit_time,
+            "predict_time": predict_time,
+            "total_time": fit_time + predict_time
+        })
+
+    def add_convergence_info(self, n_iter: int, tolerance: float,
+                           converged: bool) -> None:
+        """Add convergence information to metadata."""
+        self.metadata["convergence_info"].update({
+            "n_iterations": n_iter,
+            "final_tolerance": tolerance,
+            "converged": converged
+        })
+
+    def compute_performance_metrics(self) -> None:
+        """Compute and store common performance metrics."""
+        from sklearn.metrics import r2_score, mean_squared_error
+
+        # Test metrics
+        residuals = self.y_test - self.y_predict
+        test_score = r2_score(self.y_test, self.y_predict)
+        test_mse = mean_squared_error(self.y_test, self.y_predict)
+
+        # Train metrics (if model provides predict method)
+        train_score = None
+        if hasattr(self, 'model'):  # If model is stored
+            try:
+                train_pred = self.model.predict(self.x_train)
+                train_score = r2_score(self.y_train, train_pred)
+            except AttributeError:
+                pass
+
+        self.metadata["performance_metrics"].update({
+            "train_score": train_score,
+            "test_score": test_score,
+            "residuals": residuals,
+            "r2_score": test_score,  # Same as test_score
+            "mse": test_mse
+        })
+
+    def add_warning(self, warning: str) -> None:
+        """Add a warning message to metadata."""
+        self.metadata["warnings"].append(warning)
 
     def to_dict(self) -> Dict[str, Union[str, pd.DataFrame, pd.Series,
                                        npt.NDArray[np.float64]]]:
