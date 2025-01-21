@@ -680,11 +680,18 @@ def solve_bayesian_linear_regression(
         prior_covariance + likelihood_precision * design_matrix
     )
 
+    # Start timing
+    start_fit = time.time()
+    
     # Compute the posterior mean
     posterior_mean = posterior_covariance @ (likelihood_precision * x.T @ y)
-
-    # Calculate prediction using posterior mean as weights
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_pred = x_test_np @ posterior_mean
+    predict_time = time.time() - start_predict
 
     # Store intermediate results
     intermediate_results: Dict[str, Dict[str, Union[npt.NDArray[np.float64], float]]] = {
@@ -701,7 +708,8 @@ def solve_bayesian_linear_regression(
         }
     }
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="bayesian_linear_regression",
         x_train=x_train,
         x_test=x_test,
@@ -710,6 +718,12 @@ def solve_bayesian_linear_regression(
         y_predict=y_pred.flatten(),
         intermediates=intermediate_results
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 def solve_normal_equation(
     x_train: pd.DataFrame,
