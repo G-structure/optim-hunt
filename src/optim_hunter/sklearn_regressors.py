@@ -1768,19 +1768,35 @@ def baseline_last(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     pred = float(y_train.values[-1]) # Use values instead of iloc
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64],
         np.array([pred for _ in range(len(y_test))]))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="last",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={"last_value": pred}
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def baseline_random(
@@ -1802,23 +1818,42 @@ def baseline_random(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     random_state = kwargs.get('random_state', 1)
     r = random.Random(random_state)
     y_train_list: list[float] = y_train.values.tolist()
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(
         npt.NDArray[np.float64],
         np.array([r.choice(y_train_list) for _ in range(len(y_test))])
     )
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="random",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "random_state": random_state,
+            "training_values": y_train_list
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def baseline_constant(
@@ -1840,18 +1875,34 @@ def baseline_constant(
     Returns:
         RegressionResults containing model predictions and metadata
     """
+    # Start timing
+    start_fit = time.time()
+    
     pred_val = kwargs["constant_prediction_value"]
+    
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], np.full(len(y_test), pred_val))
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name="constant_prediction",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={"constant_value": pred_val}
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def linear_regression_manual_gd(
@@ -1883,10 +1934,18 @@ def linear_regression_manual_gd(
     y_train_np = cast(npt.NDArray[np.float64], y_train.to_numpy())
     x_test_np = cast(npt.NDArray[np.float64], x_test.to_numpy())
 
+    # Start timing
+    start_fit = time.time()
+
     # Initialize parameters (weights and bias)
     n_features = x_train_np.shape[1]
     weights = np.zeros(n_features)
     bias = 0
+
+    # Track intermediate values
+    weight_history = [weights.copy()]
+    bias_history = [bias]
+    gradient_history = []
 
     # Perform gradient descent steps
     m = len(x_train_np)
@@ -1897,23 +1956,47 @@ def linear_regression_manual_gd(
         # Compute gradients
         dw = (1 / m) * np.dot(x_train_np.T, (y_pred - y_train_np))
         db = (1 / m) * np.sum(y_pred - y_train_np)
+        gradient_history.append((dw.copy(), db))
 
         # Update parameters
         weights = weights - learning_rate * dw
         bias = bias - learning_rate * db
+        
+        # Store history
+        weight_history.append(weights.copy())
+        bias_history.append(bias)
 
-    # Make predictions on test set
+    fit_time = time.time() - start_fit
+    
+    # Prediction timing
+    start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], np.dot(x_test_np, weights) + bias)
+    predict_time = time.time() - start_predict
 
-    return RegressionResults(
+    # Create results
+    results = RegressionResults(
         model_name=f"linear_regression_gd_{steps}_steps",
         x_train=x_train,
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
         y_predict=y_predict,
-        intermediates=None
+        intermediates={
+            "weight_history": weight_history,
+            "bias_history": bias_history,
+            "gradient_history": gradient_history,
+            "final_weights": weights,
+            "final_bias": bias,
+            "learning_rate": learning_rate,
+            "steps": steps
+        }
     )
+
+    # Add metadata
+    results.add_timing(fit_time, predict_time)
+    results.compute_performance_metrics()
+
+    return results
 
 
 def create_linear_regression_gd_variants(
