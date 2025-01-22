@@ -92,3 +92,43 @@ def calculate_sgd_gradients(
     results["final_losses"] = torch.tensor(results["final_losses"])       # [lr]
 
     return results
+
+
+from sklearn.linear_model import LinearRegression as SklearnLinearRegression
+import numpy as np
+from typing import Optional, Dict, Any
+
+class InstrumentedLinearRegression(SklearnLinearRegression):
+    """LinearRegression with intermediate calculation tracking.
+
+    Extends sklearn's LinearRegression to store intermediate results from the
+    fitting process.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.intermediate_results: Optional[Dict[str, Any]] = None
+
+    def fit(self, X, y, sample_weight=None):
+        """Fit linear model and store intermediate results."""
+        # Call parent's fit method first
+        super().fit(X, y, sample_weight)
+
+        # Store intermediate calculations
+        # Note: We can only access what sklearn makes public
+        self.intermediate_results = {
+            "Coefficients": self.coef_,
+            "Intercept": self.intercept_,
+            "Rank": getattr(self, 'rank_', None),  # Only available for dense X
+            "Singular Values": getattr(self, 'singular_', None),  # Only available for dense X
+            "Number of Features": self.n_features_in_,
+            "Feature Names": getattr(self, 'feature_names_in_', None)
+        }
+
+        return self
+
+    def get_intermediate_results(self) -> Dict[str, Any]:
+        """Get stored intermediate results from the fitting process."""
+        if self.intermediate_results is None:
+            raise RuntimeError("Model has not been fit yet.")
+        return self.intermediate_results

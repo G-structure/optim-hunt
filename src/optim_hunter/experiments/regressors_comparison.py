@@ -157,9 +157,9 @@ def generate_and_compare_predictions(
         regressor_results = []
         predictions = {"true_value": float(y_test.iloc[0])}
         mse_scores = {}
-        
+
         for regressor in regressors:
-            result = regressor(x_train, x_test, y_train, y_test, random_state=i)
+            result = regressor(x_train, x_test, y_train, y_test, **{"random_state": i})
             regressor_results.append(result)
             predictions[result.model_name] = float(result.y_predict[0])
             mse_scores[result.model_name] = result.metadata["performance_metrics"]["mse"]

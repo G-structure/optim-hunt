@@ -485,7 +485,13 @@ def create_regressor_results(
 
         # Get predictions and calculate MSE for each regressor
         for regressor in regressors:
-            result = regressor(x_train, x_test, y_train, y_test, random_state)
+            result = regressor(
+                x_train,
+                x_test,
+                y_train,
+                y_test,
+                **{'random_state': random_state}
+            )
             model_name = result.model_name
             model_predictions = result.y_predict
 
