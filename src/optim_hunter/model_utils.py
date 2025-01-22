@@ -396,8 +396,7 @@ def run_and_cache_model_linreg_tokens_batched(
     regressors: List[
         Callable[
             [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-            Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[
-                np.float64]]]
+            RegressionResults
         ]
     ],
     seq_len: int,
