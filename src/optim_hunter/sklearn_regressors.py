@@ -91,10 +91,10 @@ def create_llm_regressor(
         ))
 
         fit_time = time.time() - start_fit
-    
+
         # Prediction timing
         start_predict = time.time()
-    
+
         try:
             # Extract generated value and convert to float
             generated_part = str(pred_text.replace(prompt, "").strip())
@@ -105,7 +105,7 @@ def create_llm_regressor(
 
         # Convert prediction to numpy array
         y_pred = np.array([y_predict], dtype=np.float64)
-    
+
         predict_time = time.time() - start_predict
 
         # Create results object
@@ -152,12 +152,12 @@ def linear_regression(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = LinearRegression()
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -201,15 +201,15 @@ def ridge(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = Ridge(random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -253,15 +253,15 @@ def lasso(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = Lasso(random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -305,10 +305,10 @@ def mlp_universal_approximation_theorem1(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(10,),
         activation="relu",
@@ -316,9 +316,9 @@ def mlp_universal_approximation_theorem1(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -363,10 +363,10 @@ def mlp_universal_approximation_theorem2(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(100,),
         activation="relu",
@@ -374,9 +374,9 @@ def mlp_universal_approximation_theorem2(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -396,7 +396,7 @@ def mlp_universal_approximation_theorem2(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
+
     if not model.n_iter_ < model.max_iter:
         results.add_warning("Failed to converge in maximum iterations")
 
@@ -424,10 +424,10 @@ def mlp_universal_approximation_theorem3(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(1000,),
         activation="relu",
@@ -435,9 +435,9 @@ def mlp_universal_approximation_theorem3(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -457,7 +457,7 @@ def mlp_universal_approximation_theorem3(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
+
     if not model.n_iter_ < model.max_iter:
         results.add_warning("Failed to converge in maximum iterations")
 
@@ -484,10 +484,10 @@ def mlp_deep1(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(10, 10),
         activation="relu",
@@ -495,9 +495,9 @@ def mlp_deep1(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -517,7 +517,7 @@ def mlp_deep1(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
+
     if not model.n_iter_ < model.max_iter:
         results.add_warning("Failed to converge in maximum iterations")
 
@@ -544,10 +544,10 @@ def mlp_deep2(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 10),
         activation="relu",
@@ -555,9 +555,9 @@ def mlp_deep2(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -577,7 +577,7 @@ def mlp_deep2(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
+
     if not model.n_iter_ < model.max_iter:
         results.add_warning("Failed to converge in maximum iterations")
 
@@ -604,10 +604,10 @@ def mlp_deep3(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = MLPRegressor(
         hidden_layer_sizes=(10, 20, 30, 20, 10),
         activation="relu",
@@ -615,9 +615,9 @@ def mlp_deep3(
         random_state=random_state,
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -637,7 +637,7 @@ def mlp_deep3(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
+
     if not model.n_iter_ < model.max_iter:
         results.add_warning("Failed to converge in maximum iterations")
 
@@ -664,15 +664,15 @@ def random_forest(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = RandomForestRegressor(max_depth=3, random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -719,15 +719,15 @@ def bagging(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = BaggingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -742,7 +742,7 @@ def bagging(
         y_test=y_test,
         y_predict=y_predict,
         intermediates={
-            "n_estimators": model.n_estimators_,
+            "n_estimators": model.n_estimators,
             "estimators_samples": [len(s) for s in model.estimators_samples_]
         }
     )
@@ -774,15 +774,15 @@ def gradient_boosting(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = GradientBoostingRegressor(random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -829,15 +829,15 @@ def adaboost(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     model = AdaBoostRegressor(n_estimators=100, random_state=random_state)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -886,10 +886,10 @@ def voting(
         RegressionResults containing model predictions and metadata
     """
     random_state = kwargs.get('random_state', 1)
-    
+
     # Start timing
     start_fit = time.time()
-    
+
     # Define base models for voting
     base_models = [
         ('lr', LinearRegression()),
@@ -898,9 +898,9 @@ def voting(
     ]
     model = VotingRegressor(estimators=base_models)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -908,7 +908,7 @@ def voting(
 
     # Get individual predictions from each estimator
     individual_predictions = {
-        name: est.predict(x_test) 
+        name: est.predict(x_test)
         for name, est in model.named_estimators_.items()
     }
 
@@ -953,7 +953,7 @@ def bayesian_regression1(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = make_pipeline(
         PolynomialFeatures(degree=10, include_bias=False),
         StandardScaler(),
@@ -961,9 +961,9 @@ def bayesian_regression1(
     )
 
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1012,12 +1012,12 @@ def svm_regression(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = SVR()
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1066,12 +1066,12 @@ def svm_and_scaler_regression(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = make_pipeline(StandardScaler(), SVR())
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1121,12 +1121,12 @@ def knn_regression(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KNeighborsRegressor()
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1175,12 +1175,12 @@ def knn_regression_v2(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KNeighborsRegressor(weights="distance")
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1229,12 +1229,12 @@ def knn_regression_v3(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KNeighborsRegressor(n_neighbors=3, weights="distance")
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1283,12 +1283,12 @@ def knn_regression_v4(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KNeighborsRegressor(n_neighbors=1, weights="distance")
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1341,7 +1341,7 @@ def knn_regression_v5_adaptable(
     """
     # Start timing
     start_fit = time.time()
-    
+
     # Adapt number of neighbors based on dataset size
     if x_train.shape[0] < 3:
         n_neighbors = 1
@@ -1352,9 +1352,9 @@ def knn_regression_v5_adaptable(
 
     model = KNeighborsRegressor(n_neighbors=n_neighbors, weights="distance")
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1371,9 +1371,7 @@ def knn_regression_v5_adaptable(
         intermediates={
             "n_neighbors": model.n_neighbors,
             "effective_metric_": model.effective_metric_,
-            "weights": model.weights,
-            "dataset_size": x_train.shape[0]
-        }
+            "weights": model.weights        }
     )
 
     # Add metadata
@@ -1406,12 +1404,12 @@ def knn_regression_generic(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KNeighborsRegressor(**knn_kwargs)
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1429,7 +1427,6 @@ def knn_regression_generic(
             "n_neighbors": model.n_neighbors,
             "effective_metric_": model.effective_metric_,
             "weights": model.weights,
-            "knn_kwargs": knn_kwargs
         }
     )
 
@@ -1472,7 +1469,7 @@ def knn_regression_search() -> List[Callable[
                              random_state: int = 1) -> RegressionResults:
                         # Start timing
                         start_fit = time.time()
-                        
+
                         results = knn_regression_generic(
                             x_train,
                             x_test,
@@ -1485,9 +1482,9 @@ def knn_regression_search() -> List[Callable[
                                 "p": p
                             }
                         )
-                        
+
                         fit_time = time.time() - start_fit
-                        
+
                         # Add search parameters and timing to intermediates
                         if results.intermediates is None:
                             results.intermediates = {}
@@ -1502,10 +1499,10 @@ def knn_regression_search() -> List[Callable[
                                 "fit_time": fit_time
                             }
                         })
-                        
+
                         # Add metadata
                         results.compute_performance_metrics()
-                        
+
                         return results
                     return knn_fn
                 knn_fns.append(create_knn(n_neighbors_val, weights_val,
@@ -1534,12 +1531,12 @@ def kernel_ridge_regression(
     """
     # Start timing
     start_fit = time.time()
-    
+
     model = KernelRidge()
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1590,7 +1587,7 @@ def lr_with_polynomial_features_regression(
 
     # Start timing
     start_fit = time.time()
-    
+
     # Create pipeline that transforms data using PolynomialFeatures then
     # applies Linear Regression
     model = Pipeline(
@@ -1601,9 +1598,9 @@ def lr_with_polynomial_features_regression(
     )
 
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1658,7 +1655,7 @@ def spline_regression(
 
     # Start timing
     start_fit = time.time()
-    
+
     # Create pipeline that transforms data using SplineTransformer then
     # applies Linear Regression
     model = Pipeline(
@@ -1668,9 +1665,9 @@ def spline_regression(
         ]
     )
     model.fit(x_train, y_train)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], model.predict(x_test))
@@ -1720,11 +1717,11 @@ def baseline_average(
     """
     # Start timing
     start_fit = time.time()
-    
+
     pred = float(np.mean(y_train))
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64],
@@ -1770,11 +1767,11 @@ def baseline_last(
     """
     # Start timing
     start_fit = time.time()
-    
+
     pred = float(y_train.values[-1]) # Use values instead of iloc
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64],
@@ -1788,8 +1785,7 @@ def baseline_last(
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
-        y_predict=y_predict,
-        intermediates={"last_value": pred}
+        y_predict=y_predict
     )
 
     # Add metadata
@@ -1820,13 +1816,13 @@ def baseline_random(
     """
     # Start timing
     start_fit = time.time()
-    
+
     random_state = kwargs.get('random_state', 1)
     r = random.Random(random_state)
     y_train_list: list[float] = y_train.values.tolist()
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(
@@ -1842,11 +1838,7 @@ def baseline_random(
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
-        y_predict=y_predict,
-        intermediates={
-            "random_state": random_state,
-            "training_values": y_train_list
-        }
+        y_predict=y_predict
     )
 
     # Add metadata
@@ -1877,11 +1869,11 @@ def baseline_constant(
     """
     # Start timing
     start_fit = time.time()
-    
+
     pred_val = kwargs["constant_prediction_value"]
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], np.full(len(y_test), pred_val))
@@ -1894,8 +1886,7 @@ def baseline_constant(
         x_test=x_test,
         y_train=y_train,
         y_test=y_test,
-        y_predict=y_predict,
-        intermediates={"constant_value": pred_val}
+        y_predict=y_predict
     )
 
     # Add metadata
@@ -1961,13 +1952,13 @@ def linear_regression_manual_gd(
         # Update parameters
         weights = weights - learning_rate * dw
         bias = bias - learning_rate * db
-        
+
         # Store history
         weight_history.append(weights.copy())
         bias_history.append(bias)
 
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_predict = cast(npt.NDArray[np.float64], np.dot(x_test_np, weights) + bias)
@@ -2119,7 +2110,7 @@ def create_linear_regression_gd_variants(
 
                     # Start timing
                     start_fit = time.time()
-                    
+
                     # Initialize parameters
                     n_features = x_train_np.shape[1]
                     np.random.seed(random_state)
