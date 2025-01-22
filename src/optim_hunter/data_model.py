@@ -2,6 +2,7 @@
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
+from optim_hunter.LR_methods import RegressionResults
 import numpy.typing as npt
 import pandas as pd
 import torch as t
@@ -13,7 +14,7 @@ def create_comparison_data(
     model: Any,
     dataset_func: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame,
         pd.Series]],
-    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
+    regressors: List[Callable[..., RegressionResults]],
     random_state: int = 1,
     seq_len: Optional[int] = None
 ) -> Dict[str, Union[str, t.Tensor, Dict[str, float], List[str]]]:
@@ -73,8 +74,8 @@ def create_comparison_data(
     predictions['gold'] = gold
     for regressor in regressors:
         result = regressor(x_train, x_test, y_train, y_test)
-        model_name = str(result['model_name'])
-        predictions[model_name] = float(result['y_predict'][0])
+        model_name = str(result.model_name)
+        predictions[model_name] = float(result.y_predict[0])
 
     # Create comparison names and token pairs
     comparison_names: List[str] = []
@@ -82,7 +83,7 @@ def create_comparison_data(
 
     # Create list of all predictors (including gold)
     all_predictors = ['gold'] + [
-        str(reg(x_train, x_test, y_train, y_test)['model_name'])
+        str(reg(x_train, x_test, y_train, y_test).model_name)
         for reg in regressors
     ]
 
