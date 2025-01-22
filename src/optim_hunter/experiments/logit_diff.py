@@ -64,11 +64,12 @@ def generate_logit_diff_batched(
     # Extract names and token pairs from comparison data
     token_pairs_names = []
     for reg_result in first_comparison["regression_results"]:
-        if hasattr(reg_result, "model_name"):
-            token_pairs_names.append(reg_result.model_name)
+        if isinstance(reg_result, dict):
+            # Handle legacy dictionary results
+            token_pairs_names.append(str(reg_result.get("model_name", "unknown")))
         else:
-            # Fallback for any legacy results
-            token_pairs_names.append(str(reg_result))
+            # Handle RegressionResults objects
+            token_pairs_names.append(reg_result.model_name)
     
     base_token_pairs = first_comparison["token_pairs"]
 
