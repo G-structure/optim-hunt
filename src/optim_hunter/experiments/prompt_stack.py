@@ -7,6 +7,7 @@ and generates visualizations of the results.
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
+from optim_hunter.LR_methods import RegressionResults
 import numpy as np
 import pandas as pd
 import torch
@@ -250,8 +251,8 @@ def stacked_compare() -> Dict[
 
         for regressor in regressors:
             reg_result = regressor(x_train, x_test, y_train, y_test)
-            reg_name = reg_result['model_name']
-            reg_pred = cast(float, reg_result['y_predict'][0])
+            reg_name = reg_result.model_name
+            reg_pred = cast(float, reg_result.y_predict[0])
             batch_results['predictions'][reg_name] = reg_pred
 
         gold = float(cast(float, y_test.iloc[0]))
