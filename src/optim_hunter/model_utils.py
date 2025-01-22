@@ -15,6 +15,8 @@ from typing import (
     cast,
 )
 
+from optim_hunter.LR_methods import RegressionResults
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -229,7 +231,7 @@ def generate_linreg_tokens(
     regressors: List[
         Callable[
             [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-            Dict[str, Union[str, npt.NDArray[Any]]]  # Fixed type hint
+            RegressionResults
         ]
     ],
     seq_len: int = 5,
@@ -347,8 +349,7 @@ def run_and_cache_model_linreg_tokens(
     regressors: List[
         Callable[
             [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],
-            Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[
-                np.float64]]]
+            RegressionResults
         ]
     ],
     seq_len: int,
