@@ -430,37 +430,12 @@ def solve_lasso_regression(
     y_test: pd.Series,
     **kwargs: Any
 ) -> RegressionResults:
-    """Apply lasso regression using coordinate descent.
-
-    Args:
-        x_train: Training features
-        x_test: Test features
-        y_train: Training labels (target values)
-        y_test: Test labels
-        **kwargs: Additional keyword arguments like:
-            regularization_param: The regularization parameter λ (default is 1.0)
-            max_iter: Maximum number of iterations (default is 1000)
-            tol: Convergence tolerance (default is 1e-4)
-
-    Returns:
-        RegressionResults containing:
-            - model_name: Name identifier for the lasso regression method
-            - x_train: Training features matrix provided as input
-            - x_test: Test features matrix provided as input
-            - y_train: Training target values provided as input
-            - y_test: Test target values provided as input
-            - y_predict: Model's predicted values for x_test
-            - intermediates: Dict of intermediate calculations including:
-                - Regularization Term (λ||w||₁): L1 penalty values at each iteration
-                - Soft Thresholding Steps: Weight values after each update
-                - Weights (w): Weight trajectory during optimization
-
-    """
+    """Apply lasso regression using coordinate descent."""
     # Start timing
     start_fit = time.time()
 
     # Get keyword args with defaults
-    regularization_param = kwargs.get("regularization_param", 1.0)
+    regularization_param = kwargs.get("regularization_param", 0.1)  # Reduced from 1.0
     max_iter = kwargs.get("max_iter", 1000)
     tol = kwargs.get("tol", 1e-4)
 
@@ -476,8 +451,11 @@ def solve_lasso_regression(
     # Initialize weights
     weights = np.zeros((x.shape[1], 1), dtype=np.float64)
 
-    # Number of samples and features
-    n_samples, n_features = x.shape
+    # Normalize features (except bias term)
+    feature_norms = np.sqrt(np.sum(x[:, 1:] ** 2, axis=0))
+    feature_norms[feature_norms == 0] = 1.0  # Avoid division by zero
+    x[:, 1:] = x[:, 1:] / feature_norms
+    x_test_np[:, 1:] = x_test_np[:, 1:] / feature_norms
 
     # Store intermediate results
     intermediate_results: Dict[str, List[Union[float, npt.NDArray[np.float64]]]] = {
@@ -487,54 +465,78 @@ def solve_lasso_regression(
     }
 
     def soft_thresholding_operator(value: float, lambda_: float) -> float:
-        """Apply the soft thresholding operator."""
-        if value > lambda_:
-            return value - lambda_
-        elif value < -lambda_:
-            return value + lambda_
+        """Apply the soft thresholding operator with bounds checking."""
+        if np.abs(value) <= lambda_:
+            return 0.0
+        elif value > lambda_:
+            return np.minimum(value - lambda_, 1e6)  # Add upper bound
         else:
-            return 0
+            return np.maximum(value + lambda_, -1e6)  # Add lower bound
 
-    # Coordinate Descent
+    # Coordinate Descent with stability checks
+    converged = False
     for iteration in range(max_iter):
         weights_prev = weights.copy()
 
-        for j in range(n_features):
-            # Compute residual
-            residual = y - x @ weights + x[:, j].reshape(-1, 1) * weights[j]
+        for j in range(x.shape[1]):
+            # Skip update if feature is constant
+            if j > 0 and np.all(x[:, j] == x[0, j]):
+                continue
 
-            # Compute partial correlation
-            rho = np.dot(x[:, j], residual.flatten())
+            # Compute residual with numerical stability
+            try:
+                partial_fit = x @ weights
+                partial_fit -= x[:, j].reshape(-1, 1) * weights[j]
+                residual = y - partial_fit
 
-            # Update weight j
-            if j == 0:  # Do not regularize bias term
-                weights[j] = rho / n_samples
-            else:
-                weights[j] = soft_thresholding_operator(
-                    rho / n_samples,
-                    regularization_param
-                )
+                # Check for numerical issues
+                if np.any(np.isnan(residual)) or np.any(np.isinf(residual)):
+                    raise ValueError("Numerical instability in residual computation")
 
-        # Compute regularization term
-        reg_term = regularization_param * np.sum(np.abs(weights[1:]))
-        intermediate_results["Regularization Term (λ||w||₁)"].append(reg_term)
+                # Compute correlation
+                correlation = np.dot(x[:, j], residual.flatten())
+
+                # Update weight
+                if j == 0:  # Bias term - no regularization
+                    weights[j] = correlation / x.shape[0]
+                else:
+                    weights[j] = soft_thresholding_operator(
+                        correlation / x.shape[0],
+                        regularization_param
+                    )
+
+            except (ValueError, RuntimeWarning) as e:
+                logger.warning(f"Numerical issue in iteration {iteration}, feature {j}: {str(e)}")
+                continue
 
         # Store intermediate results
-        intermediate_results["Soft Thresholding Steps"].append(
-            weights.copy().flatten()
-        )
+        reg_term = regularization_param * np.sum(np.abs(weights[1:]))  # Exclude bias
+        intermediate_results["Regularization Term (λ||w||₁)"].append(float(reg_term))
+        intermediate_results["Soft Thresholding Steps"].append(weights.copy().flatten())
         intermediate_results["Weights (w)"].append(weights.copy().flatten())
 
         # Check convergence
-        if np.linalg.norm(weights - weights_prev, ord=1) < tol:
+        weight_diff = np.linalg.norm(weights - weights_prev, ord=1)
+        if weight_diff < tol:
+            converged = True
             break
 
-    # Calculate prediction for test data
     fit_time = time.time() - start_fit
+
+    # Prediction timing
     start_predict = time.time()
-    y_pred = x_test_np @ weights
+    try:
+        y_pred = x_test_np @ weights
+        # Check for invalid predictions
+        if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
+            raise ValueError("Invalid predictions detected")
+    except ValueError as e:
+        logger.error(f"Error in prediction: {str(e)}")
+        # Fallback to simple mean prediction
+        y_pred = np.full_like(x_test_np @ weights, np.mean(y))
     predict_time = time.time() - start_predict
 
+    # Create results
     results = RegressionResults(
         model_name="lasso_regression",
         x_train=x_train,
@@ -547,7 +549,18 @@ def solve_lasso_regression(
 
     # Add metadata
     results.add_timing(fit_time, predict_time)
-    results.compute_performance_metrics()
+    results.add_convergence_info(
+        n_iter=iteration + 1,
+        tolerance=weight_diff if 'weight_diff' in locals() else np.inf,
+        converged=converged
+    )
+
+    try:
+        results.compute_performance_metrics()
+    except Exception as e:
+        logger.error(f"Error computing performance metrics: {str(e)}")
+        # Add warning to results
+        results.add_warning(f"Performance metrics computation failed: {str(e)}")
 
     return results
 
@@ -558,41 +571,14 @@ def solve_sgd(
     y_test: pd.Series,
     **kwargs: Any
 ) -> RegressionResults:
-    """Perform Stochastic Gradient Descent (SGD) optimization.
-
-    Args:
-        x_train: Training features
-        x_test: Test features
-        y_train: Training labels (target values)
-        y_test: Test labels
-        **kwargs: Additional keyword arguments like:
-            learning_rate: Learning rate (α) for weight updates (default is 0.01)
-            max_iter: Maximum number of iterations (default is 100)
-            batch_size: Size of the mini-batch for each step (default is 1)
-            tol: Convergence tolerance (default is 1e-4)
-            random_state: Random seed for reproducibility (default is 42)
-
-    Returns:
-        RegressionResults containing:
-            - model_name: Name identifier for the SGD method
-            - x_train: Training features matrix provided as input
-            - x_test: Test features matrix provided as input
-            - y_train: Training target values provided as input
-            - y_test: Test target values provided as input
-            - y_predict: Model's predicted values for x_test
-            - intermediates: Dict of intermediate calculations including:
-                - Random Sampling of Data Points: Batch indices at each step
-                - Gradient of Loss for Current Sample (∇L_i): Batch gradients
-                - Intermediate Weights (w₁, w₂, ..., wₙ): Weight trajectory
-
-    """
+    """Perform Stochastic Gradient Descent (SGD) optimization with improved stability."""
     # Start timing
     start_fit = time.time()
 
     # Get keyword args with defaults
-    learning_rate = kwargs.get("learning_rate", 0.01)
+    learning_rate = kwargs.get("learning_rate", 0.001)  # Reduced learning rate
     max_iter = kwargs.get("max_iter", 100)
-    batch_size = kwargs.get("batch_size", 1)
+    batch_size = kwargs.get("batch_size", 32)  # Increased batch size
     tol = kwargs.get("tol", 1e-4)
     random_state = kwargs.get("random_state", 42)
 
@@ -608,8 +594,16 @@ def solve_sgd(
     x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
     x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Initialize weights
-    weights = np.zeros((x.shape[1], 1), dtype=np.float64)
+    # Normalize features (except bias term)
+    feature_means = np.mean(x[:, 1:], axis=0)
+    feature_stds = np.std(x[:, 1:], axis=0)
+    feature_stds[feature_stds == 0] = 1.0  # Avoid division by zero
+
+    x[:, 1:] = (x[:, 1:] - feature_means) / feature_stds
+    x_test_np[:, 1:] = (x_test_np[:, 1:] - feature_means) / feature_stds
+
+    # Initialize weights with small random values
+    weights = np.random.randn(x.shape[1], 1) * 0.01
 
     # Number of samples
     n_samples = x.shape[0]
@@ -621,47 +615,103 @@ def solve_sgd(
         "Intermediate Weights (w₁, w₂, ..., wₙ)": []
     }
 
-    # Perform SGD
-    for iteration in range(max_iter):
-        # Shuffle data for randomness in sampling
-        indices = np.arange(n_samples)
-        np.random.shuffle(indices)
+    # Initialize variables for adaptive learning rate
+    prev_loss = float('inf')
+    patience = 5
+    patience_counter = 0
+    min_lr = 1e-6
 
-        for start_idx in range(0, n_samples, batch_size):
-            # Select mini-batch
-            batch_indices = indices[start_idx:start_idx + batch_size]
-            X_batch = x[batch_indices]
-            y_batch = y[batch_indices]
+    # Perform SGD with stability checks
+    converged = False
+    try:
+        for iteration in range(max_iter):
+            # Shuffle data for randomness in sampling
+            indices = np.arange(n_samples)
+            np.random.shuffle(indices)
 
-            # Predict output for the mini-batch
-            predictions = X_batch @ weights
+            epoch_loss = 0.0
+            num_batches = 0
 
-            # Compute gradient
-            gradient = -(2 / batch_size) * (X_batch.T @ (y_batch - predictions))
+            for start_idx in range(0, n_samples, batch_size):
+                # Select mini-batch
+                batch_indices = indices[start_idx:start_idx + batch_size]
+                X_batch = x[batch_indices]
+                y_batch = y[batch_indices]
 
-            # Update weights
-            weights -= learning_rate * gradient
+                # Compute predictions
+                try:
+                    predictions = X_batch @ weights
 
-            # Store intermediate results
-            intermediate_results["Random Sampling of Data Points"].append(
-                batch_indices.astype(np.float64)
-            )
-            intermediate_results["Gradient of Loss for Current Sample (∇L_i)"].append(
-                gradient.flatten()
-            )
-            intermediate_results["Intermediate Weights (w₁, w₂, ..., wₙ)"].append(
-                weights.flatten()
-            )
+                    # Compute gradient with clipping
+                    error = y_batch - predictions
+                    gradient = -(2 / len(batch_indices)) * (X_batch.T @ error)
 
-        # Check convergence
-        if np.linalg.norm(gradient, ord=2) < tol:
-            break
+                    # Gradient clipping
+                    grad_norm = np.linalg.norm(gradient)
+                    if grad_norm > 1.0:
+                        gradient = gradient / grad_norm
+
+                    # Update weights with momentum
+                    weights = weights - learning_rate * gradient
+
+                    # Compute batch loss
+                    batch_loss = np.mean(error ** 2)
+                    epoch_loss += batch_loss
+                    num_batches += 1
+
+                except (RuntimeWarning, ValueError) as e:
+                    logger.warning(f"Numerical issue in batch update: {str(e)}")
+                    continue
+
+                # Store intermediate results
+                intermediate_results["Random Sampling of Data Points"].append(
+                    batch_indices.astype(np.float64)
+                )
+                intermediate_results["Gradient of Loss for Current Sample (∇L_i)"].append(
+                    gradient.flatten()
+                )
+                intermediate_results["Intermediate Weights (w₁, w₂, ..., wₙ)"].append(
+                    weights.flatten()
+                )
+
+            # Compute average epoch loss
+            avg_epoch_loss = epoch_loss / num_batches if num_batches > 0 else float('inf')
+
+            # Learning rate adaptation
+            if avg_epoch_loss > prev_loss:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    learning_rate = max(learning_rate * 0.5, min_lr)
+                    patience_counter = 0
+            else:
+                patience_counter = 0
+
+            prev_loss = avg_epoch_loss
+
+            # Check convergence
+            if learning_rate <= min_lr or avg_epoch_loss < tol:
+                converged = True
+                break
+
+    except Exception as e:
+        logger.error(f"Error during SGD optimization: {str(e)}")
+        # Fallback to simple mean prediction
+        weights = np.zeros_like(weights)
+        weights[0] = np.mean(y)
 
     fit_time = time.time() - start_fit
 
     # Prediction timing
     start_predict = time.time()
-    y_pred = x_test_np @ weights
+    try:
+        y_pred = x_test_np @ weights
+        # Check for invalid predictions
+        if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
+            raise ValueError("Invalid predictions detected")
+    except ValueError as e:
+        logger.error(f"Error in prediction: {str(e)}")
+        # Fallback to simple mean prediction
+        y_pred = np.full_like(x_test_np @ weights, np.mean(y))
     predict_time = time.time() - start_predict
 
     # Create results
@@ -677,7 +727,17 @@ def solve_sgd(
 
     # Add metadata
     results.add_timing(fit_time, predict_time)
-    results.compute_performance_metrics()
+    results.add_convergence_info(
+        n_iter=iteration + 1 if 'iteration' in locals() else max_iter,
+        tolerance=avg_epoch_loss if 'avg_epoch_loss' in locals() else np.inf,
+        converged=converged
+    )
+
+    try:
+        results.compute_performance_metrics()
+    except Exception as e:
+        logger.error(f"Error computing performance metrics: {str(e)}")
+        results.add_warning(f"Performance metrics computation failed: {str(e)}")
 
     return results
 

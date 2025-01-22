@@ -74,6 +74,47 @@ print(html)
 ```
 <</execute>>
 
+<<execute id="9" output="raw">>
+```python
+from optim_hunter.experiments.regressors_comparison import compare_llm_and_regressors
+from optim_hunter.LR_methods import (
+    solve_ols,  # replaces linear_regression
+    solve_ridge_regression,  # replaces ridge
+    solve_lasso_regression,  # replaces lasso
+    solve_sgd,  # can replace some of the iterative methods
+    solve_bayesian_linear_regression,  # replaces bayesian_regression1
+    solve_normal_equation,  # another linear regression variant
+    solve_ridge_regression_closed_form,  # another ridge variant
+    solve_irls,  # iteratively reweighted least squares
+    solve_pcr,  # principal component regression
+    solve_knn  # replaces knn variants
+)
+from optim_hunter.datasets import get_dataset_friedman_2, get_original2
+from optim_hunter.llama_model import load_llama_model
+
+llama_model = load_llama_model()
+model_name = "llama-8b"
+
+seq_len = 25
+batches = 100
+regressors = [
+    solve_ols,
+    solve_ridge_regression,
+    solve_lasso_regression,
+    solve_sgd,
+    solve_bayesian_linear_regression,
+    solve_normal_equation,
+    solve_ridge_regression_closed_form,
+    solve_irls,
+    solve_pcr,
+    solve_knn
+]
+
+html = compare_llm_and_regressors(dataset=get_original2, regressors=regressors, seq_len=seq_len, batches=batches, model=llama_model)
+print(html)
+```
+<</execute>>
+
 # Logit Differences
 
 <<execute id="3" output="raw">>
