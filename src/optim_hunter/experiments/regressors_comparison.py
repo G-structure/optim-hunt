@@ -267,7 +267,7 @@ def compare_llm_and_regressors(
     dataset: Callable[
         ..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
     ],
-    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
+    regressors: List[Callable[..., RegressionResults]],
     seq_len: Optional[int],
     batches: int,
     model: HookedTransformer
