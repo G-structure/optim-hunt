@@ -50,13 +50,33 @@ class RegressionResults:
         "warnings": []
     })
 
-    def add_timing(self, fit_time: float, predict_time: float) -> None:
-        """Add timing information to metadata."""
-        self.metadata["timing_info"].update({
-            "fit_time": fit_time,
-            "predict_time": predict_time,
-            "total_time": fit_time + predict_time
-        })
+    def add_timing(
+        self,
+        fit_time: Optional[float] = None,
+        predict_time: Optional[float] = None,
+        total_time: Optional[float] = None
+    ) -> None:
+        """Add timing information to metadata.
+
+        Args:
+            fit_time: Time taken for model fitting (optional)
+            predict_time: Time taken for prediction (optional)
+            total_time: Total computation time (optional)
+        """
+        timing_info = {}
+        if fit_time is not None:
+            timing_info["fit_time"] = fit_time
+        if predict_time is not None:
+            timing_info["predict_time"] = predict_time
+        if total_time is not None:
+            timing_info["total_time"] = total_time
+        elif fit_time is not None and predict_time is not None:
+            timing_info["total_time"] = fit_time + predict_time
+
+        if timing_info:
+            self.metadata["timing_info"].update(timing_info)
+
+
 
     def add_convergence_info(self, n_iter: int, tolerance: float,
                            converged: bool) -> None:
@@ -144,6 +164,9 @@ def solve_ols(
                 - y_predict: Model predictions on test data
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -153,17 +176,14 @@ def solve_ols(
     x = np.hstack((np.ones((x.shape[0], 1), dtype=np.float64), x))
     x_test_np = np.hstack((np.ones((x_test_np.shape[0], 1), dtype=np.float64), x_test_np))
 
-    # Start timing
-    start_fit = time.time()
-    
     # Calculate intermediate matrices
     design_matrix = x.T @ x
     pseudoinverse = np.linalg.inv(design_matrix)
     weighted_feature_matrix = x.T @ y
     weights = pseudoinverse @ weighted_feature_matrix
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
@@ -184,12 +204,6 @@ def solve_ols(
             "Weights (w)": weights
         }
     )
-
-    # Add metadata
-    results.add_timing(fit_time, predict_time)
-    results.compute_performance_metrics()
-
-    return results
 
     # Add metadata
     results.add_timing(fit_time, predict_time)
@@ -281,20 +295,14 @@ def solve_gradient_descent(
         if np.linalg.norm(gradient) < tolerance:
             break
 
-    # Start timing
-    start_fit = time.time()
-    
     # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
     predict_time = time.time() - start_predict
 
-    # Create results
+    # Add timing info
     results = RegressionResults(
         model_name="gradient_descent",
         x_train=x_train,
@@ -316,13 +324,6 @@ def solve_gradient_descent(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
-    # Add convergence info
-    results.add_convergence_info(
-        n_iter=iteration + 1,
-        tolerance=np.linalg.norm(gradient),
-        converged=(np.linalg.norm(gradient) < tolerance)
-    )
 
     return results
 
@@ -358,6 +359,9 @@ def solve_ridge_regression(
                 - Weights (w): Final computed weights
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get regularization parameter from kwargs
     regularization_param = kwargs.get("regularization_param", 1.0)
 
@@ -390,14 +394,8 @@ def solve_ridge_regression(
     # Compute the weights (w = (XᵀX + λI)^(-1)Xᵀy)
     weights = pseudoinverse @ weighted_feature_matrix
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
@@ -458,13 +456,13 @@ def solve_lasso_regression(
                 - Weights (w): Weight trajectory during optimization
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get keyword args with defaults
     regularization_param = kwargs.get("regularization_param", 1.0)
     max_iter = kwargs.get("max_iter", 1000)
     tol = kwargs.get("tol", 1e-4)
-
-    # Start timing
-    start_fit = time.time()
 
     # Convert to numpy arrays for computation
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
@@ -531,20 +529,12 @@ def solve_lasso_regression(
         if np.linalg.norm(weights - weights_prev, ord=1) < tol:
             break
 
-    # Start timing
-    start_fit = time.time()
-    
     # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
-    # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
     predict_time = time.time() - start_predict
 
-    # Create results
     results = RegressionResults(
         model_name="lasso_regression",
         x_train=x_train,
@@ -558,13 +548,6 @@ def solve_lasso_regression(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
-    # Add convergence info
-    results.add_convergence_info(
-        n_iter=iteration + 1,
-        tolerance=np.linalg.norm(weights - weights_prev, ord=1),
-        converged=(np.linalg.norm(weights - weights_prev, ord=1) < tol)
-    )
 
     return results
 
@@ -603,6 +586,9 @@ def solve_sgd(
                 - Intermediate Weights (w₁, w₂, ..., wₙ): Weight trajectory
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get keyword args with defaults
     learning_rate = kwargs.get("learning_rate", 0.01)
     max_iter = kwargs.get("max_iter", 100)
@@ -671,14 +657,8 @@ def solve_sgd(
         if np.linalg.norm(gradient, ord=2) < tol:
             break
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
@@ -698,13 +678,6 @@ def solve_sgd(
     # Add metadata
     results.add_timing(fit_time, predict_time)
     results.compute_performance_metrics()
-    
-    # Add convergence info
-    results.add_convergence_info(
-        n_iter=iteration + 1,
-        tolerance=np.linalg.norm(gradient, ord=2),
-        converged=(np.linalg.norm(gradient, ord=2) < tol)
-    )
 
     return results
 
@@ -740,6 +713,9 @@ def solve_bayesian_linear_regression(
                 - Posterior Mean and Covariance: Updated distribution
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get keyword args with defaults
     alpha = kwargs.get("alpha", 1.0)
     beta = kwargs.get("beta", 1.0)
@@ -769,14 +745,11 @@ def solve_bayesian_linear_regression(
         prior_covariance + likelihood_precision * design_matrix
     )
 
-    # Start timing
-    start_fit = time.time()
-    
     # Compute the posterior mean
     posterior_mean = posterior_covariance @ (likelihood_precision * x.T @ y)
-    
+
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ posterior_mean
@@ -845,6 +818,9 @@ def solve_normal_equation(
                 - Weights (w): Final computed regression coefficients
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Convert input data to numpy arrays for matrix computations
     x = cast(npt.NDArray[np.float64], x_train.to_numpy())
     y = cast(npt.NDArray[np.float64], y_train.to_numpy()).reshape(-1, 1)
@@ -862,14 +838,8 @@ def solve_normal_equation(
     # Compute the weights using the Normal Equation
     weights = np.linalg.inv(design_matrix) @ weighted_feature_matrix
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
@@ -932,6 +902,9 @@ def solve_ridge_regression_closed_form(  # Renamed to be more specific
                 - Weights (w): Final regularized coefficients
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get regularization parameter from kwargs
     lambda_reg = kwargs.get("lambda_reg", 1.0)
 
@@ -962,14 +935,8 @@ def solve_ridge_regression_closed_form(  # Renamed to be more specific
     # Compute the weights using the Ridge Regression closed-form solution
     weights = np.linalg.inv(modified_design_matrix) @ weighted_feature_matrix
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction for test data
-    y_pred = x_test_np @ weights
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ weights
@@ -1033,6 +1000,9 @@ def solve_irls(
                 - Final Weights (w): Converged model parameters
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get keyword args with defaults
     max_iter = kwargs.get("max_iter", 100)
     tol = kwargs.get("tol", 1e-6)
@@ -1086,14 +1056,8 @@ def solve_irls(
             print(f"Converged in {iteration + 1} iterations.")
             break
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction for test data
-    y_pred = x_test_np @ w
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = x_test_np @ w
@@ -1158,6 +1122,9 @@ def solve_pcr(
                 - Weights (w): Final regression coefficients
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get number of components from kwargs
     n_components = kwargs.get("n_components", None)
 
@@ -1207,14 +1174,8 @@ def solve_pcr(
     w = np.linalg.inv(transformed_train_with_bias.T @ transformed_train_with_bias) @ \
         (transformed_train_with_bias.T @ y)
 
-    # Start timing
-    start_fit = time.time()
-    
-    # Calculate prediction using transformed test data
-    y_pred = transformed_test_with_bias @ w
-    
     fit_time = time.time() - start_fit
-    
+
     # Prediction timing
     start_predict = time.time()
     y_pred = transformed_test_with_bias @ w
@@ -1281,6 +1242,9 @@ def solve_knn(
                 - Neighbor Labels (L): Labels of k-nearest neighbors
 
     """
+    # Start timing
+    start_fit = time.time()
+
     # Get k from kwargs with default
     k = kwargs.get("k", 5)
 
@@ -1303,13 +1267,15 @@ def solve_knn(
     neighbor_labels = y_train_np[neighbor_indices]
 
     # 3. Regression (using mean instead of mode for regression)
+    fit_time = time.time() - start_fit
+
+    # Prediction timing
+    start_predict = time.time()
     y_pred = np.zeros(num_test, dtype=np.float64)
     for i in range(num_test):
         y_pred[i] = np.mean(neighbor_labels[i])
+    predict_time = time.time() - start_predict
 
-    # Start timing
-    start_fit = time.time()
-    
     # Store intermediate results
     intermediate_results: Dict[str, npt.NDArray[np.float64]] = {
         "Distances (D)": distances,
@@ -1317,15 +1283,6 @@ def solve_knn(
         "Neighbor Labels (L)": neighbor_labels,
         "k_neighbors": np.array([k], dtype=np.float64)
     }
-    
-    fit_time = time.time() - start_fit
-    
-    # Prediction timing
-    start_predict = time.time()
-    y_pred = np.zeros(num_test, dtype=np.float64)
-    for i in range(num_test):
-        y_pred[i] = np.mean(neighbor_labels[i])
-    predict_time = time.time() - start_predict
 
     # Create results
     results = RegressionResults(
