@@ -109,7 +109,7 @@ def calculate_metrics(
 def generate_and_compare_predictions(
     model: HookedTransformer,
     dataset_func: Callable[..., Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]],
-    regressors: List[Callable[..., Dict[str, Union[str, npt.NDArray[Any]]]]],
+    regressors: List[Callable[..., RegressionResults]],
     num_samples: int = 5,
     seq_len: Optional[int] = None
 ) -> Dict[str, Union[List[Dict[str, Any]], Dict[str, float]]]:
@@ -142,12 +142,19 @@ def generate_and_compare_predictions(
         # Get dataset with same random seed
         dataset_tuple = dataset_func(random_state=i)
 
-        # Get regressor predictions and MSE
-        predictions_df, mse_df = create_regressor_results(
-            dataset=dataset_tuple,
-            regressors=regressors,
-            random_state=i
-        )
+        # Get dataset with same random seed
+        x_train, y_train, x_test, y_test = dataset_tuple
+
+        # Get regressor predictions
+        regressor_results = []
+        predictions = {"true_value": float(y_test.iloc[0])}
+        mse_scores = {}
+        
+        for regressor in regressors:
+            result = regressor(x_train, x_test, y_train, y_test, random_state=i)
+            regressor_results.append(result)
+            predictions[result.model_name] = float(result.y_predict[0])
+            mse_scores[result.model_name] = result.metadata["performance_metrics"]["mse"]
 
         # Get LLM prediction
         model_pred = extract_model_prediction(
@@ -156,21 +163,10 @@ def generate_and_compare_predictions(
             sample_id=i,
         )
 
-
         # Add LLM prediction to results
-        true_value = float(predictions_df['true_value'].iloc[0])
-        predictions = {
-            "true_value": true_value,
-            **{col: predictions_df[col].iloc[0]
-               for col in predictions_df.columns
-               if col != 'true_value'},
-            "LLaMA-3.1 8B": model_pred  # Use model name instead of generic "llm"
-        }
-
-        # Calculate MSE for all predictions including LLM
-        mse_scores = {name: float(mse_df.at[name, 'MSE'])
-                      for name in mse_df.index}
         if model_pred is not None:
+            predictions["LLaMA-3.1 8B"] = model_pred
+            true_value = float(y_test.iloc[0])
             mse_scores['LLaMA-3.1 8B'] = float((model_pred - true_value) ** 2)
 
         sample_results = {
