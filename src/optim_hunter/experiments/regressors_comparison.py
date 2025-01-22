@@ -35,19 +35,26 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 MAIN = __name__ == "__main__"
 
 def calculate_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
+    y_true: Union[np.ndarray, RegressionResults],
+    y_pred: Optional[np.ndarray] = None,
 ) -> Dict[str, float]:
     """Calculate comprehensive set of regression metrics.
 
     Args:
-        y_true: Array of true values
-        y_pred: Array of predicted values
+        y_true: Array of true values or RegressionResults object
+        y_pred: Array of predicted values (not needed if y_true is RegressionResults)
 
     Returns:
         Dict containing calculated metrics
 
     """
+    # Handle RegressionResults input
+    if isinstance(y_true, RegressionResults):
+        y_true_array = y_true.y_test.values
+        y_pred_array = y_true.y_predict
+    else:
+        y_true_array = y_true
+        y_pred_array = y_pred if y_pred is not None else np.array([])
     # Handle edge cases
     if len(y_true) == 0 or len(y_pred) == 0:
         return {}
