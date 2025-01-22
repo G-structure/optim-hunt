@@ -72,20 +72,23 @@ def create_comparison_data(
     # Get predictions from each regressor
     predictions: Dict[str, float] = {}
     predictions['gold'] = gold
+    regressor_names: List[str] = []
+    
+    # Store results to avoid recomputing
+    regressor_results: List[RegressionResults] = []
     for regressor in regressors:
         result = regressor(x_train, x_test, y_train, y_test)
         model_name = str(result.model_name)
         predictions[model_name] = float(result.y_predict[0])
+        regressor_names.append(model_name)
+        regressor_results.append(result)
 
     # Create comparison names and token pairs
     comparison_names: List[str] = []
     token_pairs: List[t.Tensor] = []
 
     # Create list of all predictors (including gold)
-    all_predictors = ['gold'] + [
-        str(reg(x_train, x_test, y_train, y_test).model_name)
-        for reg in regressors
-    ]
+    all_predictors = ['gold'] + regressor_names
 
     # Generate unique combinations (not permutations)
     for i, pred1 in enumerate(all_predictors):
