@@ -254,21 +254,21 @@ def stacked_compare() -> Dict[
             reg_name = reg_result.model_name
             reg_pred = cast(float, reg_result.y_predict[0])
             batch_results['predictions'][reg_name] = reg_pred
+            # Get MSE directly from results metadata
+            batch_results['mse_scores'][reg_name] = reg_result.metadata["performance_metrics"]["mse"]
 
         gold = float(cast(float, y_test.iloc[0]))
         print(f"Gold value: {gold}")
         batch_results['predictions']['gold'] = gold
 
-        for method_name, pred in batch_results['predictions'].items():
-            if method_name != 'gold' and pred is not None:
-                try:
-                    gold_value = float(batch_results['predictions']['gold'])
-                    pred_value = float(pred)
-                    mse = (pred_value - gold_value) ** 2
-                    batch_results['mse_scores'][method_name] = mse
-                except (ValueError, TypeError) as e:
-                    print(f"Error calculating MSE for {method_name}: {e}")
-                    continue
+        # Handle LLM prediction MSE separately since it's not a RegressionResults
+        if 'llm' in batch_results['predictions'] and batch_results['predictions']['llm'] is not None:
+            try:
+                llm_pred = float(batch_results['predictions']['llm'])
+                mse = (llm_pred - gold) ** 2
+                batch_results['mse_scores']['llm'] = mse
+            except (ValueError, TypeError) as e:
+                print(f"Error calculating MSE for LLM: {e}")
 
         all_results.append(batch_results)
 
