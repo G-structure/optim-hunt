@@ -254,8 +254,23 @@ def stacked_compare() -> Dict[
             reg_name = reg_result.model_name
             reg_pred = cast(float, reg_result.y_predict[0])
             batch_results['predictions'][reg_name] = reg_pred
-            # Get MSE directly from results metadata
-            batch_results['mse_scores'][reg_name] = reg_result.metadata["performance_metrics"]["mse"]
+            
+            # Extract metrics from RegressionResults metadata
+            if reg_result.metadata and "performance_metrics" in reg_result.metadata:
+                metrics = reg_result.metadata["performance_metrics"]
+                batch_results['mse_scores'][reg_name] = metrics.get("mse", float('inf'))
+                
+                # Store additional metrics if available
+                if "timing_info" in reg_result.metadata:
+                    timing = reg_result.metadata["timing_info"]
+                    if "batch_timings" not in batch_results:
+                        batch_results["batch_timings"] = {}
+                    batch_results["batch_timings"][reg_name] = timing
+
+                if "warnings" in reg_result.metadata and reg_result.metadata["warnings"]:
+                    if "warnings" not in batch_results:
+                        batch_results["warnings"] = {}
+                    batch_results["warnings"][reg_name] = reg_result.metadata["warnings"]
 
         gold = float(cast(float, y_test.iloc[0]))
         print(f"Gold value: {gold}")
