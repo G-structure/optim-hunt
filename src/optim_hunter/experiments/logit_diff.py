@@ -60,7 +60,12 @@ def generate_logit_diff_batched(
     first_comparison = create_comparison_data(
         model, dataset, regressors, random_state=0, seq_len=seq_len
     )
-    token_pairs_names = first_comparison["comparison_names"]
+    
+    # Extract names and token pairs from comparison data
+    token_pairs_names = []
+    for reg_result in first_comparison["regression_results"]:
+        token_pairs_names.append(reg_result.model_name)
+    
     base_token_pairs = first_comparison["token_pairs"]
 
     # Move base_token_pairs to the same device as model
