@@ -509,30 +509,53 @@
                 vertical-align: middle;
             }
 
+            /* Plot container styles */
             .plot-container {
                 width: 100%;
                 max-width: 800px;  /* Match container max-width */
                 margin: 20px auto;
                 position: relative;
                 height: auto;
+                min-height: 600px; /* Ensure minimum height for plots */
+                padding-bottom: 100px; /* Add padding for legend */
             }
 
             .plot-container .plotly-graph-div {
-                width: 100%;
-                height: 100%;  /* Fixed height or use aspect-ratio */
-                max-height: 800px;
-
+                width: 100% !important; /* Force full width */
+                height: 100% !important;
+                min-height: 600px;
             }
 
-            /* Ensure plots scale properly on smaller screens */
+            /* Plotly-specific overrides */
+            .plot-container .legend {
+                background: transparent !important;
+                font-family: "Linux Libertine", Georgia, serif !important;
+            }
+
+            /* Ensure proper legend spacing in dark/light modes */
+            .plot-container .legend text {
+                font-family: "Linux Libertine", Georgia, serif !important;
+                font-size: 14px !important;
+            }
+
+            body.light-theme .plot-container .legend text {
+                fill: var(--text-color-light) !important;
+            }
+
+            body.dark-theme .plot-container .legend text {
+                fill: var(--text-color) !important;
+            }
+
+            /* Responsive adjustments for plots */
             @media (max-width: 800px) {
                 .plot-container {
-                    width: 100%;
-                    margin: 10px auto;
+                    margin: 10px -20px; /* Negative margin to allow full width */
+                    padding: 0 20px 120px; /* Extra padding for mobile legend */
+                    min-height: 400px; /* Smaller height on mobile */
                 }
 
                 .plot-container .plotly-graph-div {
-                    height: 100%;  /* Smaller height on mobile */
+                    min-height: 400px;
                 }
             }
         </style>

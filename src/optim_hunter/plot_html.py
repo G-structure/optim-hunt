@@ -490,13 +490,14 @@ def create_multi_line_plot(
         legend=dict(
             font=dict(color=THEME_COLORS['dark']['text_color']),
             bgcolor='rgba(0,0,0,0)',
-            orientation="h",  # Horizontal orientation
-            yanchor="bottom",  # Anchor to bottom
-            y=-0.2 * (num_legend_rows / 3),  # Scale position based on rows
-            xanchor="center",  # Center horizontally
-            x=0.5,  # Center position
+            orientation="h",          # Horizontal orientation
+            yanchor="bottom",        # Anchor to bottom
+            y=-0.15,                 # Position below plot
+            xanchor="center",        # Center horizontally
+            x=0.5,                   # Center position
             traceorder="normal"
-        )
+        ),
+        height=600                   # Fixed height to prevent squishing
     )
 
     fig = go.Figure(data=traces, layout=layout)
@@ -557,10 +558,9 @@ def create_multi_line_plot_layer_names(
     # Get the number of colors available
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
-    # Calculate number of legend rows needed (assuming ~2 items per row)
-    num_legend_rows = (len(labels) + 2) // 2  # Add 2 for rounding up
-    # Base 50px + 20px per row
-    bottom_margin = max(250, 75 + (num_legend_rows * 50))
+    # Calculate legend rows based on label length and available width
+    num_legend_rows = max(1, (len(labels) + 2) // 3)  # At least 1 row
+    legend_height = num_legend_rows * 25  # 25px per row
 
     for i, (y_values, label) in enumerate(zip(y_values_list,
                                           labels, strict=True)):
@@ -600,7 +600,13 @@ def create_multi_line_plot_layer_names(
     layout = go.Layout(
         plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
         paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
-        margin=dict(l=50, r=20, t=50, b=bottom_margin),  # Dynamic bottom margin
+        margin=dict(
+            l=50,      # left margin
+            r=20,      # right margin
+            t=50,      # top margin
+            b=100,     # bottom margin - increased to accommodate legend
+            pad=4
+        ),
         xaxis=dict(
             title=x_label,
             gridcolor=THEME_COLORS['dark']['gridcolor'],
