@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
+from optim_hunter.LR_methods import RegressionResults
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
