@@ -6,7 +6,9 @@ and tokenization for language model interactions.
 """
 
 from math import e
-from typing import Dict, Hashable, List, Tuple, Union, cast, Callable, Any, Optional
+from typing import Dict, Hashable, List, Tuple, Union, cast, Callable, Any, Optional, Sequence
+
+from optim_hunter.LR_methods import RegressionResults
 
 import numpy as np
 import numpy.typing as npt
@@ -439,7 +441,7 @@ def create_regressor_results(
     dataset: Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series],  # Simplified since we don't use List[Tuple] case
     regressors: Sequence[Callable[
         [pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, int],  # Input types
-        Dict[str, Union[str, pd.DataFrame, pd.Series, npt.NDArray[np.float64]]]  # Return type
+        RegressionResults  # Return type
     ]],
     random_state: int = 1
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -484,15 +486,14 @@ def create_regressor_results(
         # Get predictions and calculate MSE for each regressor
         for regressor in regressors:
             result = regressor(x_train, x_test, y_train, y_test, random_state)
-            model_name = str(result['model_name'])
-            model_predictions = cast(npt.NDArray[np.float64], result['y_predict'])
+            model_name = result.model_name
+            model_predictions = result.y_predict
 
             # Store predictions
             predictions[model_name] = model_predictions
 
-            # Calculate MSE
-            y_test_values = cast(np.ndarray, y_test.values)
-            mse = np.mean((y_test_values - model_predictions) ** 2)
+            # Get MSE from results metadata
+            mse = result.metadata["performance_metrics"]["mse"]
             mse_dict[model_name] = mse
 
         # Create DataFrames
