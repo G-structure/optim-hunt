@@ -558,10 +558,6 @@ def create_multi_line_plot_layer_names(
     # Get the number of colors available
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
-    # Calculate legend rows based on label length and available width
-    num_legend_rows = max(1, (len(labels) + 2) // 3)  # At least 1 row
-    legend_height = num_legend_rows * 25  # 25px per row
-
     for i, (y_values, label) in enumerate(zip(y_values_list,
                                           labels, strict=True)):
         # Use modulo to cycle through colors
@@ -580,10 +576,10 @@ def create_multi_line_plot_layer_names(
             mode='lines+markers',
             line=dict(
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
-                width=4
+                width=2
             ),
             marker=dict(
-                size=8,
+                size=2,
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
                 line=dict(
                     color=THEME_COLORS['dark']['plot_bgcolor'],
@@ -600,13 +596,7 @@ def create_multi_line_plot_layer_names(
     layout = go.Layout(
         plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
         paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
-        margin=dict(
-            l=50,      # left margin
-            r=20,      # right margin
-            t=50,      # top margin
-            b=100,     # bottom margin - increased to accommodate legend
-            pad=4
-        ),
+        margin=dict(l=50, r=20, t=20, b=20),
         xaxis=dict(
             title=x_label,
             gridcolor=THEME_COLORS['dark']['gridcolor'],
@@ -636,11 +626,11 @@ def create_multi_line_plot_layer_names(
         autosize=True,
         showlegend=True,
         legend=dict(
-            font=dict(color=THEME_COLORS['dark']['text_color']),
+            font=dict(color=THEME_COLORS['dark']['text_color'], size=10),
             bgcolor='rgba(0,0,0,0)',
             orientation="h",  # Horizontal orientation
-            yanchor="bottom",  # Anchor to bottom
-            y=-0.2 * (num_legend_rows / 3),  # Scale position based on rows
+            yanchor="top",  # Anchor to bottom
+            y = -0.3,
             xanchor="center",  # Center horizontally
             x=0.5,  # Center position
             traceorder="normal"

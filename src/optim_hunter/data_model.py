@@ -17,7 +17,7 @@ def create_comparison_data(
     regressors: List[Callable[..., RegressionResults]],
     random_state: int = 1,
     seq_len: Optional[int] = None
-) -> Dict[str, Union[str, t.Tensor, Dict[str, float], List[str]]]:
+) -> Dict[str, Union[str, t.Tensor, Dict[str, float], List[str], List[RegressionResults]]]:
     """Create a structured comparison dataset for analyzing regression models.
 
     Args:
@@ -48,6 +48,7 @@ def create_comparison_data(
             ],
             'token_pairs': tensor  # Shape: [num_comparisons, 1, 2]
                                 # Each pair contains first tokens of predictions
+            'regression_results': List[RegressionResults]  # Results from each regressor
         }
 
     Note:
@@ -73,7 +74,7 @@ def create_comparison_data(
     predictions: Dict[str, float] = {}
     predictions['gold'] = gold
     regressor_names: List[str] = []
-    
+
     # Store results to avoid recomputing
     regressor_results: List[RegressionResults] = []
     for regressor in regressors:
@@ -135,6 +136,7 @@ def create_comparison_data(
         'predictions': predictions,
         'comparison_names': comparison_names,
         'token_pairs': t.stack(token_pairs),  # Shape: [num_comparisons, 1, 2]
+        'regression_results': regressor_results
     }
 
 # # Create the data store

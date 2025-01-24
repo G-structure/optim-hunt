@@ -171,9 +171,9 @@ def prepare_prompt_from_tokens(
     all_tokens.extend(double_newline.tolist())
 
     # Print the numerical values in x_test_tokens
-    print(f"Test values:")
-    for col in x_test_tokens.columns:
-        print(f"{col}: {model.to_string(x_test_tokens[col].iloc[0])}")
+    # print(f"Test values:")
+    # for col in x_test_tokens.columns:
+    #     print(f"{col}: {model.to_string(x_test_tokens[col].iloc[0])}")
     # Add test features
     for col in x_test_tokens.columns:
         # Add feature name
