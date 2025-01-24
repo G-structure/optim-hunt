@@ -1,17 +1,20 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
-import torch
-import pandas as pd
-import matplotlib.pyplot as plt
 from pathlib import Path
+from typing import Dict, List, Optional
 
+import matplotlib.pyplot as plt
+import pandas as pd
+import torch
 from transformer_lens import HookedTransformer
-from optim_hunter.probe.probe_prediction import PredictionGenerator
+
 from optim_hunter.probe.mlp_probe import OptimizerProbe, TrainOptimizerProbe
+from optim_hunter.probe.probe_prediction import PredictionGenerator
+
 
 @dataclass
 class PredictorExperimentResult:
     """Results from training a probe with a specific predictor."""
+
     predictor_name: str
     metrics_history: List[Dict[str, float]]
     final_probe_state: Dict[str, torch.Tensor]

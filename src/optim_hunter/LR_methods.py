@@ -1113,7 +1113,7 @@ def solve_irls(
 
         # Check convergence
         if np.linalg.norm(delta_w) < tol:
-            print(f"Converged in {iteration + 1} iterations.")
+            # print(f"Converged in {iteration + 1} iterations.")
             break
 
     fit_time = time.time() - start_fit

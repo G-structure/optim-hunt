@@ -3,7 +3,6 @@ title: Reverse-Engineering Linear Regression in Language Models Notes
 date: December 2024
 reading_time: 30 minutes
 ---
-Testing
 
 # Data Preparation
 We generate sequences of input-output pairs using the Friedman #2 formula, without revealing the formula to the model.
@@ -115,6 +114,16 @@ print(html)
 ```
 <</execute>>
 
+<<execute id="8" output="raw">>
+```python
+from optim_hunter.llama_model import load_llama_model
+from optim_hunter.experiments.claude_wanted_to_try_this import analyze_llm_component_understanding
+model = load_llama_model()
+html = analyze_llm_component_understanding(model, n_samples=25)
+print(html)
+```
+<</execute>>
+
 # Logit Differences
 
 <<execute id="3" output="raw">>
@@ -128,7 +137,7 @@ model = load_llama_model()
 model_name = "llama-8b"
 
 seq_len = 19
-batches = 10
+batches = 100
 
 llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
 

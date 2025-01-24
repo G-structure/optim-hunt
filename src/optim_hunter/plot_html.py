@@ -557,11 +557,6 @@ def create_multi_line_plot_layer_names(
     # Get the number of colors available
     num_colors = len(THEME_COLORS['dark']['multi_line_colors'])
 
-    # Calculate number of legend rows needed (assuming ~2 items per row)
-    num_legend_rows = (len(labels) + 2) // 2  # Add 2 for rounding up
-    # Base 50px + 20px per row
-    bottom_margin = max(250, 75 + (num_legend_rows * 50))
-
     for i, (y_values, label) in enumerate(zip(y_values_list,
                                           labels, strict=True)):
         # Use modulo to cycle through colors
@@ -580,10 +575,10 @@ def create_multi_line_plot_layer_names(
             mode='lines+markers',
             line=dict(
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
-                width=4
+                width=2
             ),
             marker=dict(
-                size=8,
+                size=2,
                 color=THEME_COLORS['dark']['multi_line_colors'][color_index],
                 line=dict(
                     color=THEME_COLORS['dark']['plot_bgcolor'],
@@ -600,7 +595,7 @@ def create_multi_line_plot_layer_names(
     layout = go.Layout(
         plot_bgcolor=THEME_COLORS['dark']['plot_bgcolor'],
         paper_bgcolor=THEME_COLORS['dark']['paper_bgcolor'],
-        margin=dict(l=50, r=20, t=50, b=bottom_margin),  # Dynamic bottom margin
+        margin=dict(l=50, r=20, t=20, b=20),  # Dynamic bottom margin
         xaxis=dict(
             title=x_label,
             gridcolor=THEME_COLORS['dark']['gridcolor'],
@@ -630,11 +625,11 @@ def create_multi_line_plot_layer_names(
         autosize=True,
         showlegend=True,
         legend=dict(
-            font=dict(color=THEME_COLORS['dark']['text_color']),
+            font=dict(color=THEME_COLORS['dark']['text_color'], size=10),
             bgcolor='rgba(0,0,0,0)',
             orientation="h",  # Horizontal orientation
-            yanchor="bottom",  # Anchor to bottom
-            y=-0.2 * (num_legend_rows / 3),  # Scale position based on rows
+            yanchor="top",  # Anchor to bottom
+            y = -0.3,
             xanchor="center",  # Center horizontally
             x=0.5,  # Center position
             traceorder="normal"

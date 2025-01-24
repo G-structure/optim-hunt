@@ -60,21 +60,17 @@ def generate_logit_diff_batched(
     first_comparison = create_comparison_data(
         model, dataset, regressors, random_state=0, seq_len=seq_len
     )
-    
-    # Extract names and token pairs from comparison data
-    token_pairs_names = []
-    for reg_result in first_comparison["regression_results"]:
-        if isinstance(reg_result, dict):
-            # Handle legacy dictionary results
-            token_pairs_names.append(str(reg_result.get("model_name", "unknown")))
-        else:
-            # Handle RegressionResults objects
-            token_pairs_names.append(reg_result.model_name)
-    
+
+    # Use comparison_names from the data for token pairs
+    token_pairs_names = first_comparison["comparison_names"]
     base_token_pairs = first_comparison["token_pairs"]
 
     # Move base_token_pairs to the same device as model
     base_token_pairs = base_token_pairs.to(model.cfg.device)
+
+    logger.info(f"Found {len(token_pairs_names)} comparisons to analyze")
+    logger.info(f"Token pairs shape: {base_token_pairs.shape}")
+    logger.info(f"Comparison names: {token_pairs_names}")
 
     # Initialize accumulators for averaging
     accumulated_diffs_sum = None
