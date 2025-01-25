@@ -1071,7 +1071,7 @@ print(plots)</code></pre></div><pre class="code-output">Loaded pretrained model 
 })();
 </script>
     </div>
-</pre><p>Average vs llm-llama-8b, and Last vs llm-llama-8b offer the most value here.</p><p>We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation.</p><div class="code-block"><pre class="line-numbers"><code class="language-python">from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+</pre><p>Average vs llm-llama-8b, and Last vs llm-llama-8b offer the most value here.</p><p><del>We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation.</del></p><h2 id="low-mse-logit-diff">Low MSE logit diff</h2><p>Looking at the logit diff for the seeds which led to low MSE.</p><div class="code-block"><pre class="line-numbers"><code class="language-python">from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.llama_model import load_llama_model
@@ -1219,7 +1219,7 @@ print(plots)</code></pre></div><pre class="code-output">Loaded pretrained model 
 })();
 </script>
     </div>
-</pre><p>Looking at the logit diff for the seeds which led to low MSE.</p><div class="code-block"><pre class="line-numbers"><code class="language-python">from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+</pre><h2 id="high-mse-logit-diff">High MSE logit diff</h2><p>Looking at the logit diff for the seeds which led to high MSE.</p><div class="code-block"><pre class="line-numbers"><code class="language-python">from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
 from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
 from optim_hunter.datasets import get_dataset_friedman_2
 from optim_hunter.llama_model import load_llama_model
