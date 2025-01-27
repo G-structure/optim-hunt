@@ -62,7 +62,7 @@ class PredictorComparisonExperiment:
             )
 
             # Train probe
-            metrics_history = train_optimizer_probe(
+            metrics_history = TrainOptimizerProbe(
                 model=self.model,
                 probe=probe,
                 dataset_fn=self.dataset_fn,

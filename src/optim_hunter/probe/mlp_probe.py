@@ -81,10 +81,14 @@ def TrainOptimizerProbe(
         epoch_cos_sim = []
 
         for batch_idx in range(batch_size):
-            # Get fresh dataset
-            x_train, y_train, x_test, y_test = dataset_fn(
-                random_state=epoch * batch_size + batch_idx
-            )
+            # Handle both callable and direct dataset cases
+            if callable(dataset_fn):
+                x_train, y_train, x_test, y_test = dataset_fn(
+                    random_state=epoch * batch_size + batch_idx
+                )
+            else:
+                # If dataset_fn is actually the dataset tuple
+                x_train, y_train, x_test, y_test = dataset_fn
 
             # Generate prompt and get residual stream
             from optim_hunter.utils import prepare_prompt
@@ -151,6 +155,7 @@ def TrainOptimizerProbe(
                     print(f'Metadata: {target_output.metadata}')
                 print(f'MLP Loss: {loss.item():.6f}')
 
+        print('Epoch losses:', epoch_losses)
         # Record metrics
         metrics = {
             "epoch": epoch,
