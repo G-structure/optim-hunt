@@ -53,10 +53,20 @@ class PredictorComparisonExperiment:
         for predictor in self.predictors:
             print(f"\nTraining probe with predictor: {predictor.__class__.__name__}")
 
-            # Initialize probe for this predictor
+            # Initialize predictor
+            predictor_instance = predictor
+
+            # Run compute once to determine output dimension
+            if callable(self.dataset_fn):
+                x_train, y_train, x_test, y_test = self.dataset_fn(random_state=0)
+            else:
+                x_train, y_train, x_test, y_test = self.dataset_fn
+            predictor_instance.compute(x_train, y_train, x_test, y_test)
+
+            # Initialize probe with correct output dimension
             probe = OptimizerProbe(
                 d_model=self.model.cfg.d_model,
-                predictor=predictor,
+                predictor=predictor_instance,
                 hidden_dim=hidden_dim,
                 num_layers=num_layers
             )

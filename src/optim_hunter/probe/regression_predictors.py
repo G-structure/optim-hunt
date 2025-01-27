@@ -15,16 +15,15 @@ from optim_hunter.LR_methods import (
     solve_ridge_regression_closed_form,
     solve_sgd
 )
+
 def make_intermediate_predictor(
     key_path: List[str],
-    output_dim: int,
     regression_method: Callable
 ) -> type[PredictionGenerator]:
     """Factory function to create predictor classes for regression intermediates.
 
     Args:
         key_path: List of keys to access the target intermediate value
-        output_dim: Dimension of the output prediction
         regression_method: The regression method to use
 
     Returns:
@@ -35,7 +34,8 @@ def make_intermediate_predictor(
         def __init__(self):
             self._regression_fn = regression_method
             self._key_path = key_path
-            self._output_size = output_dim
+            # Output dimension will be determined on first compute call
+            self._output_dim = None
 
         def compute(
             self, x_train, y_train, x_test, y_test, **kwargs
@@ -50,12 +50,23 @@ def make_intermediate_predictor(
                     raise KeyError(f"Key {key} not found in regression results")
                 target = target[key]
 
-            # Convert to tensor if needed
+            # Get final value if target is a list
+            if isinstance(target, list):
+                target = target[-1]  # Take final value
+
+            # Convert to tensor and flatten
             if not isinstance(target, torch.Tensor):
                 target = torch.tensor(target, dtype=torch.float32)
+            target = target.flatten()
+
+            target = target.view(-1)
+
+            # Set output dimension if not already set
+            if self._output_dim is None:
+                self._output_dim = target.numel()
 
             return ProbePredictionTarget(
-                values=target,
+                values=target,  # Flatten to 1D
                 metadata={
                     "method": self._regression_fn.__name__,
                     "target": ".".join(self._key_path),
@@ -65,41 +76,43 @@ def make_intermediate_predictor(
 
         @property
         def output_dim(self) -> int:
-            return self._output_size
+            if self._output_dim is None:
+                raise RuntimeError(
+                    "Output dimension not yet determined. "
+                    "Must call compute() first."
+                )
+            return self._output_dim
 
     return IntermediatePredictor
 
-# Create a dictionary mapping intermediate names to their predictors
 def get_all_predictors() -> Dict[str, type[PredictionGenerator]]:
     """Get all available intermediate predictors."""
     predictors = {
         # IRLS intermediates
         "irls_gradients": make_intermediate_predictor(
-            ["Gradients of Loss (∇L)"], 5, solve_irls
+            ["Gradients of Loss (∇L)"], solve_irls
         ),
         "irls_weights": make_intermediate_predictor(
-            ["Final Weights (w)"], 5, solve_irls
+            ["Final Weights (w)"], solve_irls
         ),
         "irls_hessian": make_intermediate_predictor(
-            ["Hessian Matrices (H)"], 25, solve_irls
+            ["Hessian Matrices (H)"], solve_irls
         ),
 
         # SGD intermediates
         "sgd_gradients": make_intermediate_predictor(
-            ["Gradients of Loss (∇L)"], 5, solve_sgd
+            ["Gradients of Loss (∇L)"], solve_sgd
         ),
         "sgd_weights": make_intermediate_predictor(
-            ["Final Weights (w)"], 5, solve_sgd
+            ["Final Weights (w)"], solve_sgd
         ),
 
         # KNN intermediates
         "knn_distances": make_intermediate_predictor(
-            ["Distances (D)"], 10, solve_knn
+            ["Distances (D)"], solve_knn
         ),
         "knn_neighbors": make_intermediate_predictor(
-            ["Neighbor Indices (I)"], 5, solve_knn
+            ["Neighbor Indices (I)"], solve_knn
         ),
-
-        # Add more as needed...
     }
     return predictors
