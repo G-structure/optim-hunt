@@ -4,6 +4,7 @@ date: December 2024
 reading_time: 35 minutes
 ---
 
+<<<<<<< HEAD
 Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** and **non-linear regression** purely in-context[^6]. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
 
 This post dissects how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. Drawing on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], we seek to understand the internal architecture that enables these models to behave like gradient-based learners.
@@ -11,8 +12,17 @@ This post dissects how LLMs solve such problems, exploring the circuits responsi
 ---
 
 It’s easy to think of LLMs as static function approximators, but the evidence suggests they can "simulate" learning algorithms—like gradient descent—within their forward pass. This emergent capability has profound implications for how we understand, align, and control AI systems.
+=======
+Large language models (LLMs) can do more than just write code or essays; recent work shows they can perform tasks resembling **linear regression** and **non-linear regression** purely in-context. On the surface, this is surprising—linear regression is a classic optimization problem, typically solved by gradient descent or closed-form solutions. How can an LLM, trained solely on next-token prediction, carry out seemingly specialized optimization procedures without explicit supervision?
 
-## Why Focus on Linear Regression?
+This post attempts to dissect how LLMs solve such problems, exploring the circuits responsible for in-context linear regression. We draw on mechanistic interpretability[^2], theoretical insights into in-context learning[^1], and the concept of *mesa optimization*[^3][^4], seeking to understand the internal architecture that enables these models to behave like gradient-based learners.
+
+^^^
+It’s easy to think of LLMs as static function approximators, but the evidence suggests they can "simulate" learning algorithms—like gradient descent—within their forward pass. This emergent capability has profound implications for how we understand, align, and control AI systems.
+^^^
+>>>>>>> 3862703 (ah)
+
+## Why Focus on Regression?
 
 Linear regression seeks weights \(W\) that minimize the mean squared error:
 
@@ -28,7 +38,13 @@ A standard solution uses gradient descent:
 
 Linear regression may be the simplest form of in-context "learning" we can probe. If a large model can solve this without explicit supervision, what else can it do via hidden optimization loops?
 
+<<<<<<< HEAD
 Recent work[^6] shows that transformer models can implement this update rule directly through their self-attention mechanism. To understand how, we first need to examine the building blocks that make this possible.
+=======
+Non linear regression has no closed form soultion and thus is used solved with optimization.
+
+Recent work shows that transformer models can implement this update rule directly through their self-attention mechanism. To understand how, we first need to examine the building blocks that make this possible...
+>>>>>>> 3862703 (ah)
 
 ### Self-Attention as a Foundation for Learning
 
@@ -63,9 +79,13 @@ In addition to self-attention, Transformers incorporate Multi-Layer Perceptrons 
 
 By carefully constructing the weight matrices \( W_Q \), \( W_K \), and \( W_V \), we can make each attention layer perform exactly one step of gradient-based optimization. Let's explore how this construction works.
 
+<<<<<<< HEAD
 ### Constructing Gradient Descent with Self-Attention and MLPs
 
 Von Oswald et al. demonstrated that a single layer of self-attention, combined with MLPs, can implement one step of gradient descent[^1]. The key insight lies in how attention layers transform token representations through three critical operations:
+=======
+Von Oswald et al. showed that a single layer of self-attention can implement one step of gradient descent. The key insight is in how attention layers transform token representations through three key operations:
+>>>>>>> 3862703 (ah)
 
 1. **Computing Attention Scores**:
    For each query token \( j \), the attention scores measure alignment with all input tokens \( i \):
@@ -306,12 +326,73 @@ print(plots)
 
 **Key Observations:**
 
+<<<<<<< HEAD
 - **MLP Layers' Importance:**
   The MLP layers within the transformer are crucial for solving regression tasks. Specifically, the last few MLP layers (e.g., Layers 27–31) are heavily involved in performing computations necessary for regression, aligning with the notion that MLPs handle complex transformations.
 
 - **Overlap with Induction Heads:**
   There is a significant overlap with induction heads, which are known to facilitate pattern recognition and replication within transformers[^5].
+=======
+~~We can note a few things from these charts, that the MLP layers are very important for solving the regression tasks. That the important work is happening in the last few MLP layers 27 - 31. This makes sense as the MLP layers are known to preform computation.~~
 
+## Low MSE logit diff
+Looking at the logit diff for the seeds which led to low MSE.
+
+<<execute id="4" output="raw">>
+```python
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+model = load_llama_model()
+model_name = "llama-8b"
+
+seq_len = 19
+
+low_mse = [0, 1, 3, 5, 8, 10, 11, 12, 14, 16, 18, 20, 21, 22, 24, 25, 26, 27, 28, 33, 34, 35, 36, 39, 40, 41, 43, 44, 47, 48, 49, 50, 51, 54, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 73, 76, 77, 80, 81, 82, 84, 86, 87, 88, 89, 91, 92, 94, 95, 97, 99]
+n_low_mse = len(low_mse)
+
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+plots = generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=n_low_mse, model=model, random_seeds=low_mse)
+print(plots)
+```
+<</execute>>
+
+## High MSE logit diff
+Looking at the logit diff for the seeds which led to high MSE.
+
+<<execute id="5" output="raw">>
+```python
+from optim_hunter.experiments.logit_diff import generate_logit_diff_batched
+from optim_hunter.sklearn_regressors import linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, create_llm_regressor
+from optim_hunter.datasets import get_dataset_friedman_2
+from optim_hunter.llama_model import load_llama_model
+
+model = load_llama_model()
+model_name = "llama-8b"
+
+seq_len = 19
+
+low_mse = [0, 1, 3, 5, 8, 10, 11, 12, 14, 16, 18, 20, 21, 22, 24, 25, 26, 27, 28, 33, 34, 35, 36, 39, 40, 41, 43, 44, 47, 48, 49, 50, 51, 54, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 73, 76, 77, 80, 81, 82, 84, 86, 87, 88, 89, 91, 92, 94, 95, 97, 99]
+high_mse = [i for i in range(100) if i not in low_mse]
+n_high_mse = len(high_mse)
+
+llama = create_llm_regressor(model, model_name, max_new_tokens=1, temperature=0.0)
+
+regressors = [ linear_regression, knn_regression, random_forest, baseline_average, baseline_last, baseline_random, llama ]
+
+plots = generate_logit_diff_batched(dataset=get_dataset_friedman_2, regressors=regressors, seq_len=seq_len, batches=n_high_mse, model=model, random_seeds=high_mse)
+print(plots)
+```
+<</execute>>
+>>>>>>> 3862703 (ah)
+
+# Looking at Attention Patterns
+**TODO make outputs smaller they are HUGE**
 ```python
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
 from optim_hunter.llama_model import load_llama_model
@@ -326,8 +407,40 @@ output_pos, feature_pos = check_token_positions(model, dataset, seq_len, print_i
 html = attention(model, num_seeds, seq_len, dataset)
 print(html)
 ```
+# Training MLP Probes on the residual stream
 
+<<<<<<< HEAD
 A lot of overlap with induction heads is observed, which is expected. Notably, layers 27H28, 28H29, and 27H30 exhibit interesting patterns that warrant further investigation.
+=======
+```python
+from optim_hunter.probe.regression_predictors import get_all_predictors
+from optim_hunter.experiments.train_probes import PredictorComparisonExperiment
+from optim_hunter.llama_model import load_llama_model
+from optim_hunter.datasets import get_original2
+
+model = load_llama_model()
+dataset_fn = get_original2()
+# Get all predictors
+predictors = get_all_predictors()
+
+# Train probes for each intermediate
+experiment = PredictorComparisonExperiment(
+    model=model,
+    predictors=[pred() for pred in predictors.values()],
+    dataset_fn=dataset_fn,
+    experiment_name="regression_intermediates"
+)
+
+# Run the experiment
+results = experiment.run()
+```
+
+^^^
+A lot of over lap with induction heads which is expected.
+L27H28, L28H29, L27H30 look interesting
+^^^
+
+>>>>>>> 3862703 (ah)
 
 ```python
 from optim_hunter.model_utils import check_token_positions, get_tokenized_prompt
@@ -345,6 +458,7 @@ html = analyze_mlp_for_specific_tokens(model, tokens, output_pos, feature_pos, n
 print(html)
 ```
 
+<<<<<<< HEAD
 **Additional Insights:**
 
 - **Layer-Specific Activities:**
@@ -379,6 +493,8 @@ Through this exploration, we've uncovered how LLMs like Llama 3.1 can effectivel
 - **Scaling Studies:**
   Assessing how model size and depth influence the ability to perform in-context optimization can inform the design of more efficient and capable models.
 
+=======
+>>>>>>> 3862703 (ah)
 ## References
 
 [^1]: von Oswald, J., et al. "Transformers Learn In-Context by Gradient Descent." *NeurIPS 2023*. [https://arxiv.org/abs/2212.07677](https://arxiv.org/abs/2212.07677)
