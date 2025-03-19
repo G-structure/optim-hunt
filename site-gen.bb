@@ -360,79 +360,79 @@
      Prints status messages about remote execution"
   [code config & {:keys [timeout] :or {timeout default-remote-timeout}}]
   (show-spinner "Executing code remotely"
-    (fn []
-      (let [;; Create unique filename for this execution using timestamp and hash
-            timestamp (System/currentTimeMillis)                                  ; Current time for uniqueness
-            code-hash (hash code)                                                 ; Hash of code for uniqueness
-            remote-file (str temp-dir "/code-" timestamp "-" code-hash ".py")     ; Remote file path
+                (fn []
+                  (let [;; Create unique filename for this execution using timestamp and hash
+                        timestamp (System/currentTimeMillis)                                  ; Current time for uniqueness
+                        code-hash (hash code)                                                 ; Hash of code for uniqueness
+                        remote-file (str temp-dir "/code-" timestamp "-" code-hash ".py")     ; Remote file path
 
-            ;; Write code to temporary local file
-            local-file (str "/tmp/code-" timestamp "-" code-hash ".py")]          ; Local temporary file path
+               ;; Write code to temporary local file
+                        local-file (str "/tmp/code-" timestamp "-" code-hash ".py")]          ; Local temporary file path
 
-        (try
-          (spit local-file code)                                                  ; Write code to local file
+                    (try
+                      (spit local-file code)                                                  ; Write code to local file
 
-          ;; Transfer file to remote server
-          (let [host (sanitize-shell-input (:host config))
-                user (sanitize-shell-input (:user config))
-                port (sanitize-shell-input (:port config))
-                key (sanitize-shell-input (:key config))
-                scp-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SCP with security options
-                             (when key
-                               (str "-i " key " "))                               ; Add identity file if specified
-                             "-P " port " "                                       ; Port option
-                             local-file " "                                       ; Source file
-                             user "@" host ":" remote-file)                       ; Destination path
-                _ (println "Transferring code to remote server")
-                scp-result (shell/sh "bash" "-c" scp-cmd)]                        ; Execute file transfer
+             ;; Transfer file to remote server
+                      (let [host (sanitize-shell-input (:host config))
+                            user (sanitize-shell-input (:user config))
+                            port (sanitize-shell-input (:port config))
+                            key (sanitize-shell-input (:key config))
+                            scp-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SCP with security options
+                                         (when key
+                                           (str "-i " key " "))                               ; Add identity file if specified
+                                         "-P " port " "                                       ; Port option
+                                         local-file " "                                       ; Source file
+                                         user "@" host ":" remote-file)                       ; Destination path
+                            _ (println "Transferring code to remote server")
+                            scp-result (shell/sh "bash" "-c" scp-cmd)]                        ; Execute file transfer
 
-            ;; If file transfer succeeded, execute code remotely
-            (when-not (zero? (:exit scp-result))                                  ; Check transfer status
-              (println "Failed to transfer code file:" (:err scp-result)))
+               ;; If file transfer succeeded, execute code remotely
+                        (when-not (zero? (:exit scp-result))                                  ; Check transfer status
+                          (println "Failed to transfer code file:" (:err scp-result)))
 
-            (if (zero? (:exit scp-result))                                        ; Proceed only if transfer succeeded
-              (let [;; Execute Python on remote server with uv run and proper PYTHONPATH
-                    exec-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH with security options
-                                  (when key
-                                    (str "-i " key " "))                          ; Add identity file if specified
-                                  "-p " port " "                                  ; Port option
-                                  user "@" host " "                               ; User and host address
-                                  "\"cd " temp-dir " && "                         ; Change to temp directory
-                                  "timeout " timeout "s "                         ; Add timeout to command
-                                  "PYTHONPATH=" remote-src-dir " "                ; Set source in Python path
-                                  "uv run python3 " remote-file "\"")             ; Execute with uv run
-                    _ (println "Executing Python code remotely")
-                    result (try
-                             (shell/sh "bash" "-c" exec-cmd)                      ; Execute Python code remotely
-                             (catch Exception e
-                               (println "Remote execution failed with exception:" (str e))
-                               {:exit 1
-                                :out ""
-                                :err (str "Remote execution error: " (str e))}))]
+                        (if (zero? (:exit scp-result))                                        ; Proceed only if transfer succeeded
+                          (let [;; Execute Python on remote server with uv run and proper PYTHONPATH
+                                exec-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH with security options
+                                              (when key
+                                                (str "-i " key " "))                          ; Add identity file if specified
+                                              "-p " port " "                                  ; Port option
+                                              user "@" host " "                               ; User and host address
+                                              "\"cd " temp-dir " && "                         ; Change to temp directory
+                                              "timeout " timeout "s "                         ; Add timeout to command
+                                              "PYTHONPATH=" remote-src-dir " "                ; Set source in Python path
+                                              "uv run python3 " remote-file "\"")             ; Execute with uv run
+                                _ (println "Executing Python code remotely")
+                                result (try
+                                         (shell/sh "bash" "-c" exec-cmd)                      ; Execute Python code remotely
+                                         (catch Exception e
+                                           (println "Remote execution failed with exception:" (str e))
+                                           {:exit 1
+                                            :out ""
+                                            :err (str "Remote execution error: " (str e))}))]
 
-                ;; Report error details if execution failed
-                (when-not (zero? (:exit result))
-                  (println "Remote execution failed with exit code" (:exit result))
-                  (println "Error message:" (:err result)))
+                   ;; Report error details if execution failed
+                            (when-not (zero? (:exit result))
+                              (println "Remote execution failed with exit code" (:exit result))
+                              (println "Error message:" (:err result)))
 
-                ;; Clean up remote and local temporary files
-                (shell/sh "bash" "-c"                                             ; Execute cleanup command
-                          (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH with security options
-                               (when key
-                                 (str "-i " key " "))                             ; Add identity file if specified
-                               "-p " port " "                                     ; Port option
-                               user "@" host " "                                  ; User and host address
-                               "\"rm -f " remote-file "\""))                      ; Remove remote file
+                   ;; Clean up remote and local temporary files
+                            (shell/sh "bash" "-c"                                             ; Execute cleanup command
+                                      (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH with security options
+                                           (when key
+                                             (str "-i " key " "))                             ; Add identity file if specified
+                                           "-p " port " "                                     ; Port option
+                                           user "@" host " "                                  ; User and host address
+                                           "\"rm -f " remote-file "\""))                      ; Remove remote file
 
-                ;; Return execution results
-                result)                                                           ; Return execution result map
+                   ;; Return execution results
+                            result)                                                           ; Return execution result map
 
-              ;; Return error if transfer failed
-              {:exit 1                                                            ; Error exit code
-               :out ""                                                            ; Empty output
-               :err (str "Failed to transfer code to remote server: " (:err scp-result))}))  ; Error message
-          (finally
-            (io/delete-file local-file true))))))))                               ; Always clean up local file
+                 ;; Return error if transfer failed
+                          {:exit 1                                                            ; Error exit code
+                           :out ""                                                            ; Empty output
+                           :err (str "Failed to transfer code to remote server: " (:err scp-result))}))
+                      (finally
+                        (io/delete-file local-file true)))))))                        ; Always clean up local file
 
 ;;; ===================================================================
 ;;; === Cache Management Functions ===
@@ -502,23 +502,6 @@
           (println "Error reading cache for block" block-id ":" (str e))
           nil)))))                                           ; Return nil on error
 
-;; Loads targeted cache data for specific block or all blocks
-(defn load-targeted-cache
-  "Loads only the specified block's cache if computing a single block.
-   Args:
-     input-file - Path to source markdown file
-     block-id - ID of block to load cache for, or nil for all blocks
-   Returns:
-     Map of cached block data, either for single block or all blocks"
-  [input-file block-id]
-  (if block-id
-    ;; Load just the specified block cache
-    (let [cache-data (load-block-cache input-file block-id)]
-      (when cache-data
-        {block-id {:output cache-data}}))
-    ;; Load all cached blocks
-    (load-cache input-file)))
-
 ;; Loads and assembles all cached code block outputs from individual EDN files
 ;; Files are found by matching pattern: {input-filename}-block-{id}.edn
 (defn load-cache
@@ -552,6 +535,23 @@
                                     (catch Exception e nil))]                 ; Return nil on error
                 :when cached-data]                                            ; Skip invalid cache entries
             [block-id cached-data]))))                                        ; Map ID to full cache data
+
+;; Loads targeted cache data for specific block or all blocks
+(defn load-targeted-cache
+  "Loads only the specified block's cache if computing a single block.
+   Args:
+     input-file - Path to source markdown file
+     block-id - ID of block to load cache for, or nil for all blocks
+   Returns:
+     Map of cached block data, either for single block or all blocks"
+  [input-file block-id]
+  (if block-id
+    ;; Load just the specified block cache
+    (let [cache-data (load-block-cache input-file block-id)]
+      (when cache-data
+        {block-id {:output cache-data}}))
+    ;; Load all cached blocks
+    (load-cache input-file)))                                        ; Map ID to full cache data
 
 ;;; ===================================================================
 ;;; === Cache Writing Functions ===
@@ -1127,22 +1127,18 @@
   (println "\n=== Starting Site Generation ===")
 
   (let [;; Parse command line args into processing configuration
-        {:keys [input-file output-file compute-id recompute? ssh-config]} (parse-cli-args args)]
+        {:keys [input-file output-file compute-id recompute?]} (parse-cli-args args)
+        config-map (parse-cli-args args)
+        ssh-config-value (:ssh-config config-map)]
 
     ;; Set up SSH configuration if specified
-    (when ssh-config
-      (reset! ssh-config ssh-config)
+    (when ssh-config-value
+      ;; Update the atom with the ssh config
+      (reset! ssh-config ssh-config-value)
 
       ;; Test the SSH connection and set up remote environment
-      (when (test-ssh-connection ssh-config)
-        (setup-remote-environment ssh-config)))
-
-    (println "Reading content file:" input-file)
-    (println "Output will be written to:" output-file)
-    (when compute-id
-      (println "Computing block ID:" compute-id))
-    (when recompute?
-      (println "Forcing recomputation of all blocks"))
+      (when (test-ssh-connection ssh-config-value)
+        (setup-remote-environment ssh-config-value)))
 
     (let [;; Load and validate input markdown file
           raw-md (try
