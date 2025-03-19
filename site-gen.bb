@@ -181,7 +181,8 @@
    2. Creating necessary directories
    3. Transferring the local src/ directory
    4. Transferring pyproject.toml
-   5. Installing dependencies with uv sync
+   5. Transferring README.md
+   6. Installing dependencies with uv sync
 
    Args:
      config - Map containing SSH connection details
@@ -273,7 +274,27 @@
           (println "pyproject.toml transfer failed:" (:err scp-toml-result))
           (throw (Exception. "Failed to transfer pyproject.toml to remote server")))))
 
-    ;; Step 4: Install dependencies with uv sync
+    ;; Step 4: Transfer README.md to remote server
+    (println "Transferring README.md to remote server...")
+    (when (.exists (io/file "README.md"))                               ; Check if README.md exists
+      (let [host (sanitize-shell-input (:host config))
+            user (sanitize-shell-input (:user config))
+            port (sanitize-shell-input (:port config))
+            key (sanitize-shell-input (:key config))
+            remote-readme-file (str temp-dir "/README.md")              ; Path to remote README.md
+            scp-readme-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no " ; SCP with security options
+                                (when key
+                                  (str "-i " key " "))                   ; Add identity file if specified
+                                "-P " port " "                           ; Port option
+                                "README.md "                             ; Source file
+                                user "@" host ":" remote-readme-file)    ; Destination path
+            scp-readme-result (shell/sh "bash" "-c" scp-readme-cmd)]    ; Execute file transfer
+
+        (when-not (zero? (:exit scp-readme-result))                     ; Check for transfer errors
+          (println "README.md transfer failed:" (:err scp-readme-result))
+          (throw (Exception. "Failed to transfer README.md to remote server")))))
+
+    ;; Step 5: Install dependencies with uv sync
     (println "Installing Python dependencies on remote server...")
     (let [host (sanitize-shell-input (:host config))
           user (sanitize-shell-input (:user config))
@@ -300,7 +321,7 @@
 
     (catch Exception e                                                  ; Handle any setup errors
       (println "Remote environment setup error:" (str e))
-      false)))                                                          ; Return failure on exception
+      false)))                                                          ; Return failure on exception                                                       ; Return failure on exception
 
 ;; Cleans up the remote environment after execution
 (defn cleanup-remote-environment
