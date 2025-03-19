@@ -16,23 +16,28 @@ apt-get install -y git-lfs
 echo "Configuring SSH for git..."
 export GIT_SSH_COMMAND="ssh -i ${PWD}/.ssh/hf_key -o StrictHostKeyChecking=no"
 
-# Create models directory
+# Create permanent models directory
 echo "Creating models directory..."
-mkdir -p .models
+mkdir -p /opt/models
 
-# Clone the repository using the configured SSH with Git LFS
-echo "Setting up Git LFS..."
-git lfs install
+# Check if model already exists
+if [ -d "/opt/models/Llama-3.1-8B-Instruct" ]; then
+    echo "Model already exists, skipping download..."
+else
+    # Clone the repository using the configured SSH with Git LFS
+    echo "Setting up Git LFS..."
+    git lfs install
 
-echo "Cloning Llama model repository..."
-git clone --filter=blob:none git@hf.co:meta-llama/Llama-3.1-8B-Instruct .models/Llama-3.1-8B-Instruct
+    echo "Cloning Llama model repository..."
+    git clone --filter=blob:none git@hf.co:meta-llama/Llama-3.1-8B-Instruct /opt/models/Llama-3.1-8B-Instruct
 
-echo "Pulling LFS objects..."
-cd .models/Llama-3.1-8B-Instruct
-git lfs pull
+    echo "Pulling LFS objects..."
+    cd /opt/models/Llama-3.1-8B-Instruct
+    git lfs pull
+    cd -
+fi
 
 # Create completion file
-cd ../..
-touch .setup_complete
+touch ${PWD}/.setup_complete
 
 echo "Setup completed successfully"

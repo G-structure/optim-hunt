@@ -19,7 +19,7 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 # Load directly from model path https://github.com/TransformerLensOrg/TransformerLens/issues/691
 MODEL_TYPE = "meta-llama/Meta-Llama-3-8B-Instruct"
-MODEL_PATH = "/home/freiza/optim_hunter/.models/Llama-3.1-8B-Instruct/"
+MODEL_PATH = "/opt/models/Llama-3.1-8B-Instruct/"
 
 def load_llama_model(
     model_path: str = MODEL_PATH,

@@ -29,6 +29,7 @@
 (def cache-file ".code-outputs.json")
 (def cache-dir (or (System/getenv "SITE_GEN_CACHE_DIR") ".cache"))  ; Configurable cache directory
 (def temp-dir "/tmp/site-gen-remote")  ; Directory for temporary remote execution files
+(def model-dir "/opt/models")  ; Permanent directory for models
 (def remote-src-dir (str temp-dir "/src"))  ; Directory for source code on remote server
 (def remote-project-file (str temp-dir "/pyproject.toml"))  ; Path to remote pyproject.toml
 (def default-remote-timeout 3600)  ; Default timeout for remote operations (1 hour)
