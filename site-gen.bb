@@ -56,23 +56,23 @@
   (println "\n=== Testing SSH Connection ===")
   (println "Connecting to" (:host config) "on port" (:port config))
   (try
-    (let [cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+    (let [cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH command with security options
                    (when (:key config)
-                     (str "-i " (:key config) " "))
-                   "-p " (:port config) " "
-                   (:user config) "@" (:host config) " "
-                   "echo 'SSH connection successful'")
-          result (shell/sh "bash" "-c" cmd)]
-      (if (zero? (:exit result))
+                     (str "-i " (:key config) " "))                     ; Add identity file if specified
+                   "-p " (:port config) " "                             ; Specify port number
+                   (:user config) "@" (:host config) " "                ; User and host address
+                   "echo 'SSH connection successful'")                  ; Simple test command
+          result (shell/sh "bash" "-c" cmd)]                            ; Execute SSH command
+      (if (zero? (:exit result))                                        ; Check exit code
         (do
           (println "SSH connection established successfully")
-          true)
+          true)                                                         ; Return success
         (do
           (println "SSH connection failed:" (:err result))
-          false)))
-    (catch Exception e
+          false)))                                                      ; Return failure
+    (catch Exception e                                                  ; Handle any connection errors
       (println "SSH connection error:" (str e))
-      false)))
+      false)))                                                          ; Return failure on exception
 
 ;; Sets up the remote environment with source code and dependencies
 (defn setup-remote-environment
@@ -98,74 +98,74 @@
   (println "\n=== Setting Up Remote Environment ===")
   (try
     ;; Step 1: Create directories on remote server
-    (let [create-dir-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+    (let [create-dir-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SSH with security options
                               (when (:key config)
-                                (str "-i " (:key config) " "))
-                              "-p " (:port config) " "
-                              (:user config) "@" (:host config) " "
-                              "\"mkdir -p " temp-dir " && "
-                              "mkdir -p " remote-src-dir " && "
-                              "echo 'Remote directories created'\"")
-          create-result (shell/sh "bash" "-c" create-dir-cmd)]
+                                (str "-i " (:key config) " "))                     ; Add identity file if specified
+                              "-p " (:port config) " "                             ; Specify port number
+                              (:user config) "@" (:host config) " "                ; User and host address
+                              "\"mkdir -p " temp-dir " && "                        ; Create temp directory
+                              "mkdir -p " remote-src-dir " && "                    ; Create source directory
+                              "echo 'Remote directories created'\"")               ; Confirmation message
+          create-result (shell/sh "bash" "-c" create-dir-cmd)]                     ; Execute directory creation
 
-      (when-not (zero? (:exit create-result))
+      (when-not (zero? (:exit create-result))                                      ; Check for errors
         (println "Remote directory creation failed:" (:err create-result))
         (throw (Exception. "Failed to create remote directories"))))
 
     ;; Step 2: Transfer local src/ directory to remote server
     (println "Transferring source code to remote server...")
-    (when (.exists (io/file "src"))
-      (let [scp-src-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+    (when (.exists (io/file "src"))                                               ; Check if src exists locally
+      (let [scp-src-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "  ; SCP with security options
                              (when (:key config)
-                               (str "-i " (:key config) " "))
-                             "-P " (:port config) " -r "
-                             "src/* " ; Transfer all contents of src directory
-                             (:user config) "@" (:host config) ":" remote-src-dir)
-            scp-src-result (shell/sh "bash" "-c" scp-src-cmd)]
+                               (str "-i " (:key config) " "))                     ; Add identity file if specified
+                             "-P " (:port config) " -r "                          ; Port and recursive options
+                             "src/* "                                             ; Source directory contents
+                             (:user config) "@" (:host config) ":" remote-src-dir) ; Destination path
+            scp-src-result (shell/sh "bash" "-c" scp-src-cmd)]                     ; Execute file transfer
 
-        (when-not (zero? (:exit scp-src-result))
+        (when-not (zero? (:exit scp-src-result))                                   ; Check for transfer errors
           (println "Source code transfer failed:" (:err scp-src-result))
           (throw (Exception. "Failed to transfer source code to remote server")))))
 
     ;; Step 3: Transfer pyproject.toml to remote server
     (println "Transferring pyproject.toml to remote server...")
-    (when (.exists (io/file "pyproject.toml"))
-      (let [scp-toml-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+    (when (.exists (io/file "pyproject.toml"))                                    ; Check if pyproject.toml exists
+      (let [scp-toml-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no " ; SCP with security options
                               (when (:key config)
-                                (str "-i " (:key config) " "))
-                              "-P " (:port config) " "
-                              "pyproject.toml "
-                              (:user config) "@" (:host config) ":" remote-project-file)
-            scp-toml-result (shell/sh "bash" "-c" scp-toml-cmd)]
+                                (str "-i " (:key config) " "))                    ; Add identity file if specified
+                              "-P " (:port config) " "                            ; Port option
+                              "pyproject.toml "                                   ; Source file
+                              (:user config) "@" (:host config) ":" remote-project-file) ; Destination path
+            scp-toml-result (shell/sh "bash" "-c" scp-toml-cmd)]                 ; Execute file transfer
 
-        (when-not (zero? (:exit scp-toml-result))
+        (when-not (zero? (:exit scp-toml-result))                                ; Check for transfer errors
           (println "pyproject.toml transfer failed:" (:err scp-toml-result))
           (throw (Exception. "Failed to transfer pyproject.toml to remote server")))))
 
     ;; Step 4: Install dependencies with uv sync
     (println "Installing Python dependencies on remote server...")
-    (let [install-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+    (let [install-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "    ; SSH with security options
                            (when (:key config)
-                             (str "-i " (:key config) " "))
-                           "-p " (:port config) " "
-                           (:user config) "@" (:host config) " "
-                           "\"cd " temp-dir " && "
-                           "uv sync && "
-                           "echo 'Python dependencies installed successfully'\"")
-          install-result (shell/sh "bash" "-c" install-cmd)]
+                             (str "-i " (:key config) " "))                       ; Add identity file if specified
+                           "-p " (:port config) " "                               ; Port option
+                           (:user config) "@" (:host config) " "                  ; User and host address
+                           "\"cd " temp-dir " && "                                ; Change to temp directory
+                           "uv sync && "                                          ; Install dependencies with uv
+                           "echo 'Python dependencies installed successfully'\"") ; Confirmation message
+          install-result (shell/sh "bash" "-c" install-cmd)]                      ; Execute dependency installation
 
-      (if (zero? (:exit install-result))
+      (if (zero? (:exit install-result))                                          ; Check for installation success
         (do
           (println "Remote environment setup complete:")
           (println (:out install-result))
-          true)
+          true)                                                                    ; Return success
         (do
           (println "Failed to install Python dependencies:" (:err install-result))
-          false)))
+          false)))                                                                 ; Return failure
 
-    (catch Exception e
+    (catch Exception e                                                             ; Handle any setup errors
       (println "Remote environment setup error:" (str e))
-      false)))
+      false)))                                                                     ; Return failure on exception
 
 ;; Executes code on the remote server via SSH
 (defn execute-remote-python
@@ -189,58 +189,58 @@
      Prints status messages about remote execution"
   [code config]
   (let [;; Create unique filename for this execution using timestamp and hash
-        timestamp (System/currentTimeMillis)
-        code-hash (hash code)
-        remote-file (str temp-dir "/code-" timestamp "-" code-hash ".py")
+        timestamp (System/currentTimeMillis)                                     ; Current time for uniqueness
+        code-hash (hash code)                                                    ; Hash of code for uniqueness
+        remote-file (str temp-dir "/code-" timestamp "-" code-hash ".py")        ; Remote file path
 
         ;; Write code to temporary local file
-        local-file (str "/tmp/code-" timestamp "-" code-hash ".py")
-        _ (spit local-file code)
+        local-file (str "/tmp/code-" timestamp "-" code-hash ".py")              ; Local temporary file path
+        _ (spit local-file code)                                                 ; Write code to local file
 
         ;; Transfer file to remote server
-        scp-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+        scp-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "         ; SCP with security options
                      (when (:key config)
-                       (str "-i " (:key config) " "))
-                     "-P " (:port config) " "
-                     local-file " "
-                     (:user config) "@" (:host config) ":" remote-file)
+                       (str "-i " (:key config) " "))                            ; Add identity file if specified
+                     "-P " (:port config) " "                                    ; Port option
+                     local-file " "                                              ; Source file
+                     (:user config) "@" (:host config) ":" remote-file)          ; Destination path
         _ (println "Transferring code to remote server")
-        scp-result (shell/sh "bash" "-c" scp-cmd)
+        scp-result (shell/sh "bash" "-c" scp-cmd)                                ; Execute file transfer
 
         ;; If file transfer succeeded, execute code remotely
-        _ (when-not (zero? (:exit scp-result))
+        _ (when-not (zero? (:exit scp-result))                                   ; Check transfer status
             (println "Failed to transfer code file:" (:err scp-result)))]
 
-    (if (zero? (:exit scp-result))
+    (if (zero? (:exit scp-result))                                               ; Proceed only if transfer succeeded
       (let [;; Execute Python on remote server with uv run and proper PYTHONPATH
-            exec-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+            exec-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "    ; SSH with security options
                           (when (:key config)
-                            (str "-i " (:key config) " "))
-                          "-p " (:port config) " "
-                          (:user config) "@" (:host config) " "
-                          "\"cd " temp-dir " && "
-                          "PYTHONPATH=" remote-src-dir " "  ; Set PYTHONPATH to include src directory
-                          "uv run python3 " remote-file "\"")  ; Use uv run to execute with dependencies
+                            (str "-i " (:key config) " "))                       ; Add identity file if specified
+                          "-p " (:port config) " "                               ; Port option
+                          (:user config) "@" (:host config) " "                  ; User and host address
+                          "\"cd " temp-dir " && "                                ; Change to temp directory
+                          "PYTHONPATH=" remote-src-dir " "                       ; Set source in Python path
+                          "uv run python3 " remote-file "\"")                    ; Execute with uv run
             _ (println "Executing Python code remotely")
-            result (shell/sh "bash" "-c" exec-cmd)]
+            result (shell/sh "bash" "-c" exec-cmd)]                              ; Execute Python code remotely
 
         ;; Clean up remote and local temporary files
-        (shell/sh "bash" "-c"
-                  (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+        (shell/sh "bash" "-c"                                                    ; Execute cleanup command
+                  (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "       ; SSH with security options
                        (when (:key config)
-                         (str "-i " (:key config) " "))
-                       "-p " (:port config) " "
-                       (:user config) "@" (:host config) " "
-                       "\"rm -f " remote-file "\""))
-        (io/delete-file local-file true)
+                         (str "-i " (:key config) " "))                          ; Add identity file if specified
+                       "-p " (:port config) " "                                  ; Port option
+                       (:user config) "@" (:host config) " "                     ; User and host address
+                       "\"rm -f " remote-file "\""))                             ; Remove remote file
+        (io/delete-file local-file true)                                         ; Clean up local file
 
         ;; Return execution results
-        result)
+        result)                                                                  ; Return execution result map
 
       ;; Return error if transfer failed
-      {:exit 1
-       :out ""
-       :err (str "Failed to transfer code to remote server: " (:err scp-result))})))
+      {:exit 1                                                                  ; Error exit code
+       :out ""                                                                  ; Empty output
+       :err (str "Failed to transfer code to remote server: " (:err scp-result))}))) ; Error message
 
 ;;; ===================================================================
 ;;; === Cache Management Functions ===
@@ -341,8 +341,8 @@
                       cached-data (try
                                     (read-string (slurp cache-file))          ; Parse EDN format
                                     (catch Exception e nil))]                 ; Return nil on error
-                :when cached-data]                                          ; Skip invalid cache entries
-            [block-id cached-data]))))                                      ; Map ID to full cache data
+                :when cached-data]                                            ; Skip invalid cache entries
+            [block-id cached-data]))))                                        ; Map ID to full cache data
 
 ;;; ===================================================================
 ;;; === Cache Writing Functions ===
@@ -570,7 +570,7 @@
     (let [blocks (map (fn [[full-match id output-type code]]  ; Transform matches into structured maps
                         {:id id
                          :output-type output-type
-                         :code (str/trim code)           ; Clean up code whitespace
+                         :code (str/trim code)          ; Clean up code whitespace
                          :full-match full-match})
                       matches)]
       (let [ids (map :id blocks)                        ; Extract all block IDs
@@ -605,14 +605,14 @@
     "pandoc" (do
                (println "Converting output through pandoc")
                (let [res (shell/sh "pandoc"             ; Process through pandoc
-                                   "--from=markdown"      ; Input markdown format
-                                   "--to=html"            ; Output HTML format
+                                   "--from=markdown"    ; Input markdown format
+                                   "--to=html"          ; Output HTML format
                                    :in output)]
-                 (if (zero? (:exit res))               ; Check if conversion succeeded
-                   (:out res)                          ; Return converted HTML
+                 (if (zero? (:exit res))                ; Check if conversion succeeded
+                   (:out res)                           ; Return converted HTML
                    (do
                      (println "Pandoc error:" (:err res))
-                     output))))                        ; Return original on error
+                     output))))                         ; Return original on error
     (throw (Exception. (str "Invalid output type: " output-type)))))
 
 ;;; ===================================================================
@@ -726,9 +726,9 @@
           frontmatter (second parts)                     ; Extract frontmatter section
           body (nth parts 2)                             ; Get remaining content
           metadata (->> (str/split-lines frontmatter)    ; Process frontmatter lines:
-                        (remove str/blank?)               ; Remove empty lines
-                        (map #(str/split % #":\s+" 2))    ; Split each line into key-value pair
-                        (into {}))]                       ; Convert pairs to map
+                        (remove str/blank?)              ; Remove empty lines
+                        (map #(str/split % #":\s+" 2))   ; Split each line into key-value pair
+                        (into {}))]                      ; Convert pairs to map
       (println "Found metadata:" metadata)
       {:metadata metadata                                ; Return structured result
        :content body})
@@ -944,11 +944,11 @@
           {:keys [metadata content]} (parse-frontmatter raw-md)
 
           ;; Process content through transformation pipeline:
-          executed-content (execute-blocks input-file content compute-id recompute?) ; 1. Execute code blocks
+          executed-content (execute-blocks input-file content compute-id recompute?)  ; 1. Execute code blocks
           processed-content (-> executed-content
-                                process-code-blocks                                    ; 2. Format code display
-                                process-sidenotes                                      ; 3. Handle sidenotes
-                                markdown->html)                                        ; 4. Convert markdown to HTML
+                                process-code-blocks                                   ; 2. Format code display
+                                process-sidenotes                                     ; 3. Handle sidenotes
+                                markdown->html)                                       ; 4. Convert markdown to HTML
 
           ;; Load template and integrate content
           template (slurp template-file)
