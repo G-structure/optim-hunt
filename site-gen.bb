@@ -32,6 +32,7 @@
 (def remote-src-dir (str temp-dir "/src"))  ; Directory for source code on remote server
 (def remote-project-file (str temp-dir "/pyproject.toml"))  ; Path to remote pyproject.toml
 (def default-remote-timeout 3600)  ; Default timeout for remote operations (1 hour)
+(def setup-status-file (str temp-dir "/.setup-complete"))
 
 ;;; ===================================================================
 ;;; === Utility Functions ===
@@ -171,7 +172,44 @@
           false)))                                            ; Return failure
     (catch Exception e                                        ; Handle any connection errors
       (println "SSH connection error:" (str e))
-      false)))                                                ; Return failure on exception
+      false)))
+
+(defn wait-for-setup-completion
+  "Waits for the setup script to complete by checking for the status file.
+   Args:
+     config - SSH connection configuration
+   Returns:
+     true if setup completed successfully, false if timeout or error"
+  [config]
+  (let [host (sanitize-shell-input (:host config))
+        user (sanitize-shell-input (:user config))
+        port (sanitize-shell-input (:port config))
+        key (sanitize-shell-input (:key config))
+        start-time (System/currentTimeMillis)
+        timeout-ms (* 30 60 1000)] ; 30 minute timeout
+
+    (loop []
+      (let [check-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                           (when key (str "-i " key " "))
+                           "-p " port " "
+                           user "@" host " "
+                           "\"[ -f " setup-status-file " ] && echo 'complete' || echo 'waiting'\"")
+            result (shell/sh "bash" "-c" check-cmd)
+            elapsed (- (System/currentTimeMillis) start-time)]
+
+        (cond
+          (str/includes? (:out result) "complete")
+          (do (println "Setup completed successfully")
+              true)
+
+          (> elapsed timeout-ms)
+          (do (println "Setup timed out after" (/ elapsed 1000) "seconds")
+              false)
+
+          :else
+          (do (Thread/sleep 5000) ; Wait 5 seconds before checking again
+              (println "Waiting for setup to complete...")
+              (recur))))))); Return failure on exception
 
 ;; Sets up the remote environment with source code and dependencies
 (defn setup-remote-environment
@@ -297,6 +335,87 @@
           (println "README.md transfer failed:" (:err scp-readme-result))
           (throw (Exception. "Failed to transfer README.md to remote server")))))
 
+    ;; Step 4.25: Transfer SSH keys to remote server
+    (println "Setting up SSH keys for git operations...")
+    (when (.exists (io/file ".ssh"))
+      (let [host (sanitize-shell-input (:host config))
+            user (sanitize-shell-input (:user config))
+            port (sanitize-shell-input (:port config))
+            key (sanitize-shell-input (:key config))
+            remote-ssh-dir (str temp-dir "/.ssh")
+
+            ;; Create .ssh directory on remote server
+            mkdir-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                           (when key (str "-i " key " "))
+                           "-p " port " "
+                           user "@" host " "
+                           "\"mkdir -p " remote-ssh-dir " && "
+                           "chmod 700 " remote-ssh-dir "\"")
+            _ (shell/sh "bash" "-c" mkdir-cmd)
+
+            ;; Transfer SSH keys
+            scp-keys-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+                              (when key (str "-i " key " "))
+                              "-P " port " "
+                              ".ssh/* "
+                              user "@" host ":" remote-ssh-dir)
+            scp-keys-result (shell/sh "bash" "-c" scp-keys-cmd)]
+
+        (when-not (zero? (:exit scp-keys-result))
+          (println "SSH keys transfer failed:" (:err scp-keys-result))
+          (throw (Exception. "Failed to transfer SSH keys")))
+
+        ;; Set correct permissions for SSH keys
+        (let [chmod-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                             (when key (str "-i " key " "))
+                             "-p " port " "
+                             user "@" host " "
+                             "\"chmod 600 " remote-ssh-dir "/* && "
+                             "git config --global core.sshCommand 'ssh -i " remote-ssh-dir "/id_rsa -o StrictHostKeyChecking=no'\"")
+              chmod-result (shell/sh "bash" "-c" chmod-cmd)]
+
+          (when-not (zero? (:exit chmod-result))
+            (println "SSH key permission setting failed:" (:err chmod-result))
+            (throw (Exception. "Failed to set SSH key permissions"))))))
+    ;; Step 4.5: Transfer setup.sh to remote server
+    (println "Transferring setup.sh to remote server...")
+    (when (.exists (io/file "setup.sh"))                               ; Check if setup.sh exists
+      (let [host (sanitize-shell-input (:host config))
+            user (sanitize-shell-input (:user config))
+            port (sanitize-shell-input (:port config))
+            key (sanitize-shell-input (:key config))
+            remote-setup-file (str temp-dir "/setup.sh")              ; Path to remote setup.sh
+            scp-setup-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+                               (when key
+                                 (str "-i " key " "))
+                               "-P " port " "
+                               "setup.sh "
+                               user "@" host ":" remote-setup-file)
+            scp-setup-result (shell/sh "bash" "-c" scp-setup-cmd)]
+
+        (when-not (zero? (:exit scp-setup-result))
+          (println "setup.sh transfer failed:" (:err scp-setup-result))
+          (throw (Exception. "Failed to transfer setup.sh to remote server")))
+
+        ;; Execute setup.sh on remote server with progress monitoring
+        (println "Executing setup.sh on remote server...")
+        (let [exec-setup-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                                  (when key (str "-i " key " "))
+                                  "-p " port " "
+                                  user "@" host " "
+                                  "\"cd " temp-dir " && "
+                                  "chmod +x setup.sh && "
+                                  "./setup.sh && "
+                                  "touch " setup-status-file " || "
+                                  "exit 1\"")
+              setup-result (shell/sh "bash" "-c" exec-setup-cmd)]
+
+          (if (zero? (:exit setup-result))
+            (if (wait-for-setup-completion config)
+              (println "Setup completed and verified")
+              (throw (Exception. "Setup verification failed")))
+            (throw (Exception. (str "Setup failed: " (:err setup-result))))))))
+
     ;; Step 5: Install dependencies with uv sync
     (println "Installing Python dependencies on remote server...")
     (let [host (sanitize-shell-input (:host config))
@@ -344,11 +463,12 @@
           port (sanitize-shell-input (:port config))
           key (sanitize-shell-input (:key config))
           cleanup-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
-                           (when key
-                             (str "-i " key " "))
+                           (when key (str "-i " key " "))
                            "-p " port " "
                            user "@" host " "
-                           "\"rm -rf " temp-dir " && echo 'Remote cleanup complete'\"")
+                           "\"rm -f " setup-status-file " && " ; Remove status file first
+                           "rm -rf " temp-dir " && "
+                           "echo 'Remote cleanup complete'\"")
           cleanup-result (shell/sh "bash" "-c" cleanup-cmd)]
 
       (if (zero? (:exit cleanup-result))
