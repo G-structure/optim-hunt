@@ -1,26 +1,40 @@
 #!/usr/bin/env bb
 
+;;; ===================================================================
 ;;; === Site Generator Documentation ===
+;;; ===================================================================
 ;;; This script generates HTML content from markdown files with special features:
 ;;; - Executes Python code blocks locally or remotely via SSH
 ;;; - Converts markdown to HTML using pandoc
 ;;; - Handles frontmatter metadata
 ;;; - Processes sidenotes
 ;;; - Caches code execution results
+;;;
+;;; The remote execution system:
+;;; 1. Transfers the local source code to the remote machine
+;;; 2. Syncs Python dependencies using uv
+;;; 3. Executes code blocks with proper Python environment setup
+;;; 4. Returns results for integration into the generated site
 
 (require '[clojure.string :as str]
          '[clojure.java.shell :as shell]
          '[clojure.java.io :as io]
          '[cheshire.core :as json])
 
+;;; ===================================================================
 ;;; === Configuration ===
+;;; ===================================================================
 (def template-file "template.html")
 (def output-file "index.html")
 (def cache-file ".code-outputs.json")
 (def cache-dir ".cache")
 (def temp-dir "/tmp/site-gen-remote")  ; Directory for temporary remote execution files
+(def remote-src-dir (str temp-dir "/src"))  ; Directory for source code on remote server
+(def remote-project-file (str temp-dir "/pyproject.toml"))  ; Path to remote pyproject.toml
 
+;;; ===================================================================
 ;;; === SSH Connection Management ===
+;;; ===================================================================
 
 ;; Stores SSH connection settings to avoid passing them through all functions
 (def ssh-config (atom nil))
@@ -60,34 +74,95 @@
       (println "SSH connection error:" (str e))
       false)))
 
-;; Creates necessary directories on the remote server
+;; Sets up the remote environment with source code and dependencies
 (defn setup-remote-environment
   "Sets up the remote execution environment on the SSH server.
+   This comprehensive setup includes:
+   1. Creating necessary directories
+   2. Transferring the local src/ directory
+   3. Transferring pyproject.toml
+   4. Installing dependencies with uv sync
+
    Args:
      config - Map containing SSH connection details
+
    Returns:
      true if setup succeeds, false otherwise
+
    Side effects:
-     Creates remote directories for code execution
+     Creates remote directories
+     Transfers source code files
+     Installs Python dependencies
      Prints status messages about environment setup"
   [config]
   (println "\n=== Setting Up Remote Environment ===")
   (try
-    (let [cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
-                   (when (:key config)
-                     (str "-i " (:key config) " "))
-                   "-p " (:port config) " "
-                   (:user config) "@" (:host config) " "
-                   "\"mkdir -p " temp-dir " && "
-                   "echo 'Remote environment setup complete'\"")
-          result (shell/sh "bash" "-c" cmd)]
-      (if (zero? (:exit result))
+    ;; Step 1: Create directories on remote server
+    (let [create-dir-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                              (when (:key config)
+                                (str "-i " (:key config) " "))
+                              "-p " (:port config) " "
+                              (:user config) "@" (:host config) " "
+                              "\"mkdir -p " temp-dir " && "
+                              "mkdir -p " remote-src-dir " && "
+                              "echo 'Remote directories created'\"")
+          create-result (shell/sh "bash" "-c" create-dir-cmd)]
+
+      (when-not (zero? (:exit create-result))
+        (println "Remote directory creation failed:" (:err create-result))
+        (throw (Exception. "Failed to create remote directories"))))
+
+    ;; Step 2: Transfer local src/ directory to remote server
+    (println "Transferring source code to remote server...")
+    (when (.exists (io/file "src"))
+      (let [scp-src-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+                             (when (:key config)
+                               (str "-i " (:key config) " "))
+                             "-P " (:port config) " -r "
+                             "src/* " ; Transfer all contents of src directory
+                             (:user config) "@" (:host config) ":" remote-src-dir)
+            scp-src-result (shell/sh "bash" "-c" scp-src-cmd)]
+
+        (when-not (zero? (:exit scp-src-result))
+          (println "Source code transfer failed:" (:err scp-src-result))
+          (throw (Exception. "Failed to transfer source code to remote server")))))
+
+    ;; Step 3: Transfer pyproject.toml to remote server
+    (println "Transferring pyproject.toml to remote server...")
+    (when (.exists (io/file "pyproject.toml"))
+      (let [scp-toml-cmd (str "scp -o BatchMode=yes -o StrictHostKeyChecking=no "
+                              (when (:key config)
+                                (str "-i " (:key config) " "))
+                              "-P " (:port config) " "
+                              "pyproject.toml "
+                              (:user config) "@" (:host config) ":" remote-project-file)
+            scp-toml-result (shell/sh "bash" "-c" scp-toml-cmd)]
+
+        (when-not (zero? (:exit scp-toml-result))
+          (println "pyproject.toml transfer failed:" (:err scp-toml-result))
+          (throw (Exception. "Failed to transfer pyproject.toml to remote server")))))
+
+    ;; Step 4: Install dependencies with uv sync
+    (println "Installing Python dependencies on remote server...")
+    (let [install-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
+                           (when (:key config)
+                             (str "-i " (:key config) " "))
+                           "-p " (:port config) " "
+                           (:user config) "@" (:host config) " "
+                           "\"cd " temp-dir " && "
+                           "uv sync && "
+                           "echo 'Python dependencies installed successfully'\"")
+          install-result (shell/sh "bash" "-c" install-cmd)]
+
+      (if (zero? (:exit install-result))
         (do
-          (println "Remote environment setup successful")
+          (println "Remote environment setup complete:")
+          (println (:out install-result))
           true)
         (do
-          (println "Remote environment setup failed:" (:err result))
+          (println "Failed to install Python dependencies:" (:err install-result))
           false)))
+
     (catch Exception e
       (println "Remote environment setup error:" (str e))
       false)))
@@ -95,14 +170,19 @@
 ;; Executes code on the remote server via SSH
 (defn execute-remote-python
   "Executes Python code on a remote server through SSH.
+   Uses uv run to execute code with the properly configured Python environment.
+   Ensures PYTHONPATH includes the transferred source directory.
+
    Args:
      code   - String containing Python source code to execute remotely
      config - Map containing SSH connection details
+
    Returns:
      Map containing execution results:
        :exit - Exit code (0 for success)
        :out  - Standard output from execution
        :err  - Standard error from execution
+
    Side effects:
      Transfers code to remote server
      Executes code remotely
@@ -132,13 +212,15 @@
             (println "Failed to transfer code file:" (:err scp-result)))]
 
     (if (zero? (:exit scp-result))
-      (let [;; Execute Python on remote server
+      (let [;; Execute Python on remote server with uv run and proper PYTHONPATH
             exec-cmd (str "ssh -o BatchMode=yes -o StrictHostKeyChecking=no "
                           (when (:key config)
                             (str "-i " (:key config) " "))
                           "-p " (:port config) " "
                           (:user config) "@" (:host config) " "
-                          "\"cd " temp-dir " && python3 " remote-file "\"")
+                          "\"cd " temp-dir " && "
+                          "PYTHONPATH=" remote-src-dir " "  ; Set PYTHONPATH to include src directory
+                          "uv run python3 " remote-file "\"")  ; Use uv run to execute with dependencies
             _ (println "Executing Python code remotely")
             result (shell/sh "bash" "-c" exec-cmd)]
 
@@ -160,7 +242,9 @@
        :out ""
        :err (str "Failed to transfer code to remote server: " (:err scp-result))})))
 
+;;; ===================================================================
 ;;; === Cache Management Functions ===
+;;; ===================================================================
 
 ;; Ensures the existence of a cache directory for storing block execution outputs
 (defn ensure-cache-dir!
@@ -260,7 +344,9 @@
                 :when cached-data]                                          ; Skip invalid cache entries
             [block-id cached-data]))))                                      ; Map ID to full cache data
 
+;;; ===================================================================
 ;;; === Cache Writing Functions ===
+;;; ===================================================================
 
 ;; Writes execution results and metadata for a single code block to cache file
 (defn save-block-cache
@@ -290,8 +376,6 @@
       (catch Exception e                                ; Handle any write errors
         (println "Error saving cache for block" block-id ":" (str e))))))
 
-;;; === Cache Writing Functions ===
-
 ;; Writes all computed code block outputs to their respective cache files
 (defn save-cache
   "Persists all code block execution outputs to their individual cache files.
@@ -313,7 +397,9 @@
           :when output]                                 ; Only process blocks with output
     (save-block-cache input-file block-id (:code block) output)))  ; Write to individual cache file
 
+;;; ===================================================================
 ;;; === Code Block Processing ===
+;;; ===================================================================
 
 ;; Formats source code into syntax-highlighted HTML blocks with proper escaping
 (defn wrap-code-block
@@ -353,7 +439,9 @@
                      (str "```" lang "\n" code "\n```")   ; Preserve executable blocks as-is
                      (wrap-code-block code lang))))))     ; Convert regular blocks to HTML
 
+;;; ===================================================================
 ;;; === Code Execution ===
+;;; ===================================================================
 
 ;; Validates whether a string contains HTML markup by checking for common HTML indicators
 (defn is-html?
@@ -410,7 +498,9 @@
       (println "Exception running Python:" (str e))
       (str "<pre class=\"code-error\">Error: " (str e) "</pre>"))))
 
+;;; ===================================================================
 ;;; === Markdown Processing ===
+;;; ===================================================================
 
 ;; Transforms markdown content to HTML using pandoc with support for math expressions
 (defn markdown->html
@@ -453,7 +543,9 @@
                                               (str/trim processed-content))))]
       (str/replace content sidenote-pattern process-single-sidenote)))) ; Replace all matches
 
+;;; ===================================================================
 ;;; === Block Parsing and Execution ===
+;;; ===================================================================
 
 ;; Locates and parses executable code blocks from content, validating block IDs
 (defn find-code-blocks
@@ -489,7 +581,9 @@
           (throw (Exception. (str "Duplicate block IDs found: " (str/join ", " duplicates)))))
         blocks))))                                      ; Return processed blocks
 
+;;; ===================================================================
 ;;; === Output Processing ===
+;;; ===================================================================
 
 ;; Processes code execution output by either returning it raw or converting through pandoc
 (defn process-output
@@ -521,7 +615,9 @@
                      output))))                        ; Return original on error
     (throw (Exception. (str "Invalid output type: " output-type)))))
 
+;;; ===================================================================
 ;;; === Main Processing Functions ===
+;;; ===================================================================
 
 ;; Add this helper function to compare code blocks with cache
 (defn should-compute-block?
@@ -609,7 +705,9 @@
       (save-cache input-file @cache blocks)              ; Persist final cache state
       final-content)))                                   ; Return processed content
 
+;;; ===================================================================
 ;;; === Frontmatter Processing ===
+;;; ===================================================================
 
 ;; Extracts and parses YAML-style frontmatter metadata from markdown documents
 (defn parse-frontmatter
@@ -639,7 +737,9 @@
       {:metadata {}                                      ; Return empty metadata if no frontmatter
        :content content})))
 
+;;; ===================================================================
 ;;; === Template Processing ===
+;;; ===================================================================
 
 ;; Replaces template placeholders with values from metadata and content
 (defn replace-placeholders
@@ -659,7 +759,9 @@
       (str/replace "{{READING_TIME}}" (get metadata "reading_time" "")) ; Replace reading time
       (str/replace "{{CONTENT}}" content)))                             ; Insert main content
 
+;;; ===================================================================
 ;;; === SSH Configuration Parsing ===
+;;; ===================================================================
 
 ;; Parses command line arguments related to SSH remote execution
 (defn parse-ssh-args
@@ -714,7 +816,9 @@
         (when key (println "Key:" key))
         config))))
 
+;;; ===================================================================
 ;;; === Entry Point ===
+;;; ===================================================================
 
 ;; Processes and validates command line arguments, displaying help if needed
 (defn parse-cli-args
@@ -785,7 +889,9 @@
      :recompute? recompute?                     ; Whether to force recomputation
      :ssh-config ssh-config}))                  ; SSH configuration if remote execution requested
 
+;;; ===================================================================
 ;;; === Main Entry Point and Site Generation ===
+;;; ===================================================================
 
 ;; Main orchestration function that coordinates the entire site generation process:
 ;; 1. Parses command line arguments
@@ -853,7 +959,9 @@
       (spit output-file final-html)
       (println "Generated" output-file))))
 
+;;; ===================================================================
 ;;; === Script Initialization ===
+;;; ===================================================================
 
 ;; Execute main function if running as a script rather than being required as a module
 (when (= *file* (System/getProperty "babashka.file"))   ; Check if file is being executed directly
