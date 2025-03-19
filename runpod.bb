@@ -2,13 +2,13 @@
 
 ;;; === RunPod Manager ===
 ;;; A simplified command-line interface for managing RunPod resources
-;;; Author: Assistant
-;;; Date: 2024-03-19
+;;; Author: Luc Chartier
+;;; Date: 2025-03-19
 
 (ns runpod.manager
   "Command-line tool for RunPod resource management.
-   Provides a menu-driven interface to view and manage
-   pods, check GPU pricing, and create new instances."
+  Provides a menu-driven interface to view and manage
+  pods, check GPU pricing, and create new instances."
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]
             [clojure.string :as str]))
@@ -24,89 +24,89 @@
 (def ^:private running-pods-query
   "GraphQL query to fetch all pods"
   "query Pods {
-     myself {
-       pods {
-         id
-         name
-         podType
-         desiredStatus
-         costPerHr
-         gpuCount
-         machineId
-         runtime {
-           uptimeInSeconds
-           ports {
-             ip
-             isIpPublic
-             privatePort
-             publicPort
-             type
-           }
-           gpus {
-             id
-             gpuUtilPercent
-             memoryUtilPercent
-           }
-           container {
-             cpuPercent
-             memoryPercent
-           }
-         }
-       }
-     }
-   }")
+  myself {
+  pods {
+  id
+  name
+  podType
+  desiredStatus
+  costPerHr
+  gpuCount
+  machineId
+  runtime {
+  uptimeInSeconds
+  ports {
+  ip
+  isIpPublic
+  privatePort
+  publicPort
+  type
+  }
+  gpus {
+  id
+  gpuUtilPercent
+  memoryUtilPercent
+  }
+  container {
+  cpuPercent
+  memoryPercent
+  }
+  }
+  }
+  }
+  }")
 
 (def ^:private gpu-types-query
   "GraphQL query to fetch all GPU types and pricing information"
   "query GpuTypes {
-     gpuTypes {
-       id
-       displayName
-       memoryInGb
-       secureCloud
-       communityCloud
-       securePrice
-       communityPrice
-       communitySpotPrice
-       secureSpotPrice
-       maxGpuCount
-       maxGpuCountSecureCloud
-       maxGpuCountCommunityCloud
-     }
-   }")
+  gpuTypes {
+  id
+  displayName
+  memoryInGb
+  secureCloud
+  communityCloud
+  securePrice
+  communityPrice
+  communitySpotPrice
+  secureSpotPrice
+  maxGpuCount
+  maxGpuCountSecureCloud
+  maxGpuCountCommunityCloud
+  }
+  }")
 
 (def ^:private create-pod-mutation
   "GraphQL mutation to create a new pod"
   "mutation CreatePod($input: PodFindAndDeployOnDemandInput!) {
-     podFindAndDeployOnDemand(input: $input) {
-       id
-       name
-       imageName
-       desiredStatus
-       machineId
-     }
-   }")
+  podFindAndDeployOnDemand(input: $input) {
+  id
+  name
+  imageName
+  desiredStatus
+  machineId
+  }
+  }")
 
 (def ^:private create-spot-pod-mutation
   "GraphQL mutation to create a spot/interruptible pod"
   "mutation CreateSpotPod($input: PodRentInterruptableInput!) {
-     podRentInterruptable(input: $input) {
-       id
-       name
-       imageName
-       desiredStatus
-       machineId
-     }
-   }")
+  podRentInterruptable(input: $input) {
+  id
+  name
+  imageName
+  desiredStatus
+  machineId
+  }
+  }")
 
 (def ^:private stop-pod-mutation
   "GraphQL mutation to stop a pod"
   "mutation StopPod($input: PodStopInput!) {
-     podStop(input: $input) {
-       id
-       desiredStatus
-     }
-   }")
+  podStop(input: $input) {
+  id
+  desiredStatus
+  }
+  }")
 
 ;;; === API Interaction Functions ===
 
@@ -114,12 +114,12 @@
   "Makes an authenticated GraphQL request to RunPod API.
 
    Args:
-     query - GraphQL query string
-     api-key - RunPod API key for authentication
-     variables - Optional variables map for GraphQL query
+   query - GraphQL query string
+   api-key - RunPod API key for authentication
+   variables - Optional variables map for GraphQL query
 
    Returns:
-     Parsed JSON response on success, nil on failure"
+   Parsed JSON response on success, nil on failure"
   [query api-key & [variables]]
   (try
     (let [response (http/post api-endpoint
@@ -144,10 +144,10 @@
   "Retrieves all pods for the authenticated user.
 
    Args:
-     api-key - RunPod API key
+   api-key - RunPod API key
 
    Returns:
-     Vector of pod data maps"
+   Vector of pod data maps"
   [api-key]
   (println "Fetching pods...")
   (when-let [response (make-graphql-request running-pods-query api-key)]
@@ -159,10 +159,10 @@
   "Retrieves all GPU types and pricing information.
 
    Args:
-     api-key - RunPod API key
+   api-key - RunPod API key
 
    Returns:
-     Vector of GPU type data maps"
+   Vector of GPU type data maps"
   [api-key]
   (println "Fetching GPU types...")
   (when-let [response (make-graphql-request gpu-types-query api-key)]
@@ -174,11 +174,11 @@
   "Creates a new pod with specified parameters.
 
    Args:
-     api-key - RunPod API key
-     form - Map containing pod configuration parameters
+   api-key - RunPod API key
+   form - Map containing pod configuration parameters
 
    Returns:
-     Created pod data on success, nil on failure"
+   Created pod data on success, nil on failure"
   [api-key form]
   (let [{:keys [gpu-type gpu-count name image container-disk volume-size bid-mode bid-price]} form
         mutation (if bid-mode create-spot-pod-mutation create-pod-mutation)
@@ -207,11 +207,11 @@
   "Stops a running pod.
 
    Args:
-     api-key - RunPod API key
-     pod-id - ID of the pod to stop
+   api-key - RunPod API key
+   pod-id - ID of the pod to stop
 
    Returns:
-     true on success, false on failure"
+   true on success, false on failure"
   [api-key pod-id]
   (println "Stopping pod" pod-id "...")
   (when-let [response (make-graphql-request
@@ -291,6 +291,62 @@
                          (format-cost (:costPerHr pod))
                          (:gpuCount pod)
                          (format-uptime (get-in pod [:runtime :uptimeInSeconds]))))))))
+
+(defn find-ssh-port
+  "Finds the SSH port configuration for a pod, if available.
+
+   Args:
+   pod - The pod data map
+
+   Returns:
+   Map with SSH connection details, or nil if SSH is not available"
+  [pod]
+  (when-let [ports (get-in pod [:runtime :ports])]
+    (let [ssh-port (first (filter #(= (:privatePort %) 22) ports))]
+      (when ssh-port
+        {:host (:ip ssh-port)
+         :public-host (when (:isIpPublic ssh-port) (:ip ssh-port))
+         :port (:publicPort ssh-port)
+         :private-port (:privatePort ssh-port)}))))
+
+(defn format-ssh-connection-string
+  "Formats the SSH connection details into a user-friendly string.
+
+   Args:
+   pod - The pod data map
+   ssh-details - Map containing SSH connection details
+
+   Returns:
+   String containing SSH connection command"
+  [pod ssh-details]
+  (if ssh-details
+    (let [host (or (:public-host ssh-details) (:host ssh-details))
+          port (:port ssh-details)]
+      (format "ssh -p %d root@%s" port host))
+    "SSH connection not available for this pod"))
+
+(defn display-ssh-connection
+  "Displays SSH connection details for a pod.
+
+   Args:
+   pod - The pod data map
+
+   Returns:
+   nil"
+  [pod]
+  (println "\n=== SSH Connection Details ===")
+  (if (= (:desiredStatus pod) "RUNNING")
+    (if-let [ssh-details (find-ssh-port pod)]
+      (do
+        (println "Pod Name:" (:name pod))
+        (println "Pod ID:" (:id pod))
+        (println "SSH Command:" (format-ssh-connection-string pod ssh-details))
+        (println "\nConnection details:")
+        (println "  Host:" (or (:public-host ssh-details) (:host ssh-details)))
+        (println "  Port:" (:port ssh-details))
+        (println "  User: root"))
+      (println "This pod does not have SSH port exposed. Make sure your pod has port 22/tcp configured."))
+    (println "Pod is not running. Only running pods have active SSH connections.")))
 
 (defn display-pod-details
   "Displays detailed information about a pod"
@@ -466,8 +522,9 @@
       (println "\nOptions:")
       (println "1. Refresh pods list")
       (println "2. View pod details")
-      (println "3. Stop a pod")
-      (println "4. Return to main menu")
+      (println "3. Get SSH connection details")
+      (println "4. Stop a pod")
+      (println "5. Return to main menu")
 
       (let [choice (prompt "\nEnter option: ")]
         (case choice
@@ -492,6 +549,21 @@
 
           "3" (do
                 (if (empty? pods)
+                  (println "No pods available to view SSH details.")
+                  (let [pod-num (prompt-number "Enter pod number to view SSH connection details" 0)
+                        pod (when (< pod-num (count pods)) (nth pods pod-num))]
+                    (if pod
+                      (do
+                        (clear-screen)
+                        (display-ssh-connection pod)
+                        (prompt "\nPress Enter to continue..."))
+                      (do
+                        (println "Invalid pod number.")
+                        (prompt "\nPress Enter to continue...")))))
+                (recur))
+
+          "4" (do
+                (if (empty? pods)
                   (println "No pods available to stop.")
                   (let [pod-num (prompt-number "Enter pod number to stop" 0)
                         pod (when (< pod-num (count pods)) (nth pods pod-num))]
@@ -506,7 +578,7 @@
                         (prompt "\nPress Enter to continue...")))))
                 (recur))
 
-          "4" nil
+          "5" nil
 
           (do
             (println "Invalid option.")
@@ -552,10 +624,10 @@
   "Main entry point for the application.
 
    Args:
-     api-key - RunPod API key
+   api-key - RunPod API key
 
    Side effects:
-     Runs the interactive command-line interface"
+   Runs the interactive command-line interface"
   [api-key]
   (println "Initializing RunPod Manager...")
   (main-menu api-key))
