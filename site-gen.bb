@@ -209,8 +209,11 @@
                                 (str "-i " key " "))
                               "-p " port " "
                               user "@" host " "
-                              "\"command -v uv >/dev/null 2>&1 || "
-                              "{ curl -LsSf https://astral.sh/uv/install.sh | sh && echo 'uv installed successfully'; }\"")
+                              "\"if command -v uv >/dev/null 2>&1 || [ -x /root/.local/bin/uv ]; then "
+                              "echo 'uv already installed'; "
+                              "else "
+                              "curl -LsSf https://astral.sh/uv/install.sh | sh && echo 'uv installed successfully'; "
+                              "fi\"")
           uv-install-result (shell/sh "bash" "-c" uv-install-cmd)]
 
       (when-not (zero? (:exit uv-install-result))
@@ -306,6 +309,7 @@
                            "-p " port " "                               ; Port option
                            user "@" host " "                            ; User and host address
                            "\"cd " temp-dir " && "                      ; Change to temp directory
+                           "export PATH=/root/.local/bin:$PATH && "     ; Ensure uv is in PATH
                            "uv sync && "                                ; Install dependencies with uv
                            "echo 'Python dependencies installed successfully'\"") ; Confirmation message
           install-result (shell/sh "bash" "-c" install-cmd)]            ; Execute dependency installation
@@ -420,8 +424,9 @@
                                               user "@" host " "                               ; User and host address
                                               "\"cd " temp-dir " && "                         ; Change to temp directory
                                               "timeout " timeout "s "                         ; Add timeout to command
-                                              "PYTHONPATH=" remote-src-dir " "                ; Set source in Python path
-                                              "uv run python3 " remote-file "\"")             ; Execute with uv run
+                                              "bash -c 'export PATH=/root/.local/bin:$PATH && "  ; Start bash with proper PATH
+                                              "export PYTHONPATH=" remote-src-dir " && "      ; Set Python path as env variable
+                                              "/root/.local/bin/uv run python3 " remote-file "'\"")  ; Use full path to uv
                                 _ (println "Executing Python code remotely")
                                 result (try
                                          (shell/sh "bash" "-c" exec-cmd)                      ; Execute Python code remotely
