@@ -3,6 +3,7 @@ import logging
 from typing import Callable, List, Optional
 
 import einops
+import torch
 import torch as t
 from jaxtyping import Float
 from torch import Tensor
@@ -17,8 +18,9 @@ from optim_hunter.plot_html import (
     create_multi_line_plot_layer_names,
     with_identifier,
 )
+
 from optim_hunter.utils import (
-    prepare_dataset_prompts,
+    prepare_prompt,
 )
 
 # Set up logging
@@ -36,6 +38,35 @@ device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
 
 MAIN = __name__ == "__main__"
 
+def residual_stack_to_logit_diff(
+    residual_stack: Float[Tensor, "... batch d_model"],  # noqa: F722
+    cache: ActivationCache,
+    logit_diff_directions: Float[Tensor, "batch d_model"],  # noqa: F722
+) -> Float[Tensor, "..."]:
+    """Calculate logit differences from residual stack."""
+    # Get the device from the input tensor
+    device = residual_stack.device
+
+    # Apply layer normalization (keeping on same device)
+    scaled_residual_stream = cache.apply_ln_to_stack(
+        residual_stack, layer=-1, pos_slice=-1
+    )
+
+    # Ensure consistent device and dtype
+    logit_diff_directions = logit_diff_directions.to(
+        device=device,
+        dtype=scaled_residual_stream.dtype
+    )
+
+    batch_size = residual_stack.size(-2)
+    avg_logit_diff = einops.einsum(
+        scaled_residual_stream,
+        logit_diff_directions,
+        "... batch d_model, batch d_model -> ..."
+    ) / batch_size
+
+    return avg_logit_diff
+
 def generate_logit_diff_batched(
     dataset: Callable,
     regressors: List[Callable],
@@ -44,151 +75,108 @@ def generate_logit_diff_batched(
     model: HookedTransformer,
     random_seeds: Optional[List[int]] = None
 ) -> str:
-    """Generate logit difference across batches with no activations stored."""
-    # Generate all prompts and datasets upfront
-    prompts_and_data = prepare_dataset_prompts(
-        dataset_fns=dataset,
-        n_samples=batches,
-        model=model,
-        seq_len=seq_len,
-        random_seeds = random_seeds if random_seeds is not None \
-            else list(range(batches))
-    )
+    """Generate logit difference across batches with seed-specific token pairs."""
+    random_seeds = random_seeds if random_seeds is not None else list(range(batches))
+    model_device = model.W_U.device
 
-    # Get comparison names & token pairs from first batch to verify consistency
-    dataset_tuple = dataset(random_state=0)
-    first_comparison = create_comparison_data(
-        model, dataset, regressors, random_state=0, seq_len=seq_len
-    )
+    # Initialize results storage
+    all_diffs = []
+    token_pairs_names = None
+    layer_names = None
 
-    # Use comparison_names from the data for token pairs
-    token_pairs_names = first_comparison["comparison_names"]
-    base_token_pairs = first_comparison["token_pairs"]
+    for batch_idx, seed in enumerate(random_seeds):
+        print(f"Processing seed {seed} (batch {batch_idx+1}/{len(random_seeds)})")
 
-    # Move base_token_pairs to the same device as model
-    base_token_pairs = base_token_pairs.to(model.cfg.device)
+        # Get dataset and run model
+        dataset_tuple = dataset(random_state=seed)
+        x_train, y_train, x_test, y_test = dataset_tuple
+        prompt = prepare_prompt(x_train, y_train, x_test)
+        prompt_tensor = model.to_tokens(prompt, prepend_bos=True).to(model_device)
 
-    logger.info(f"Found {len(token_pairs_names)} comparisons to analyze")
-    logger.info(f"Token pairs shape: {base_token_pairs.shape}")
-    logger.info(f"Comparison names: {token_pairs_names}")
+        comparison_data = create_comparison_data(
+            model, dataset, regressors, random_state=seed, seq_len=seq_len
+        )
 
-    # Initialize accumulators for averaging
-    accumulated_diffs_sum = None
-    per_layer_diffs_sum = None
-    n_valid_batches = 0
-    labels = None
+        if token_pairs_names is None:
+            token_pairs_names = comparison_data["comparison_names"]
 
-    # Process each prompt
-    for batch_idx, (prompt_tensor, x_test, dataset_name) in \
-        enumerate(prompts_and_data):
-        logger.info(f"Processing batch {batch_idx}")
+        # Run model
+        with torch.no_grad():
+            _, cache = model.run_with_cache(prompt_tensor)
 
-        # Ensure prompt tensor is on correct device
-        prompt_tensor = prompt_tensor.to(model.cfg.device)
+        # Get accumulated and per-layer residuals once
+        accumulated_residual, curr_labels = cache.accumulated_resid(
+            layer=-1, incl_mid=True, pos_slice=-1, return_labels=True
+        )
+        per_layer_residual, _ = cache.decompose_resid(
+            layer=-1, pos_slice=-1, return_labels=True
+        )
 
-        # Run model and get logits
-        logits, cache = model.run_with_cache(prompt_tensor)
+        if layer_names is None:
+            layer_names = curr_labels
 
-        cache = cache.to("cpu")
+        # Process all token pairs at once
+        token_pairs = comparison_data["token_pairs"].to(model_device)
 
-        # Get final residual stream
-        final_residual_stream = cache["resid_post", -1]
-        final_token_residual_stream = final_residual_stream[:, -1, :]
+        # Store results for this seed
+        seed_diffs = []
 
-        # Process each token pair
-        batch_accumulated_diffs = []
-        batch_per_layer_diffs = []
+        for token_pair in token_pairs:
+            try:
+                # Get directions (on GPU)
+                token_directions = model.tokens_to_residual_directions(token_pair)
+                if token_directions.shape[1] == 1:
+                    logit_diff_directions = token_directions.squeeze(1)
+                else:
+                    correct_dir, incorrect_dir = token_directions.unbind(dim=1)
+                    logit_diff_directions = (correct_dir - incorrect_dir)
 
-        for pair_idx, token_pair in enumerate(base_token_pairs):
-            # Ensure token pair is on correct device
-            token_pair = token_pair.to("cuda:1")
+                # Calculate both diffs (keeping on GPU)
+                acc_diffs = residual_stack_to_logit_diff(
+                    accumulated_residual, cache, logit_diff_directions
+                )
+                per_layer_diffs = residual_stack_to_logit_diff(
+                    per_layer_residual, cache, logit_diff_directions
+                )
 
-            # Compute residual directions
-            pair_residual_directions = (
-                model.tokens_to_residual_directions(token_pair))
-            correct_residual_directions, incorrect_residual_directions = \
-                pair_residual_directions.unbind(dim=1)
-            logit_diff_directions = (
-                correct_residual_directions - incorrect_residual_directions
-            )
+                # Combine and store results (still on GPU)
+                combined_diffs = torch.stack([acc_diffs, per_layer_diffs])
+                seed_diffs.append(combined_diffs)
 
-            # Move logit diff directions to cuda:1
-            logit_diff_directions = logit_diff_directions.to('cuda')
-            # Accumulate residuals
-            accumulated_residual, curr_labels = cache.accumulated_resid(
-                layer=-1, incl_mid=True, pos_slice=-1, return_labels=True
-            )
-            if labels is None:
-                labels = curr_labels
+            except Exception as e:
+                print(f"Error processing pair for seed {seed}: {e}")
+                if seed_diffs:
+                    # Use shape from previous successful computation
+                    placeholder = torch.zeros_like(seed_diffs[-1])
+                    seed_diffs.append(placeholder)
 
-            # Calculate logit differences
-            logit_lens_diffs = residual_stack_to_logit_diff(
-                accumulated_residual, cache, logit_diff_directions
-            ).half()
-            batch_accumulated_diffs.append(logit_lens_diffs)
+        if seed_diffs:
+            # Stack all results for this seed (still on GPU)
+            seed_diffs = torch.stack(seed_diffs)
+            # Move to CPU only once per seed
+            all_diffs.append(seed_diffs.cpu())
 
-            # Per layer analysis
-            per_layer_residual, _ = cache.decompose_resid(
-                layer=-1, pos_slice=-1, return_labels=True
-            )
-            per_layer_diffs = residual_stack_to_logit_diff(
-                per_layer_residual, cache, logit_diff_directions
-            )
-            batch_per_layer_diffs.append(per_layer_diffs)
+        # Clear GPU memory
+        del cache, accumulated_residual, per_layer_residual
+        torch.cuda.empty_cache()
 
-        # Stack batch results
-        batch_accumulated_diffs = t.stack(batch_accumulated_diffs)
-        batch_per_layer_diffs = t.stack(batch_per_layer_diffs)
+    # Average results (on CPU)
+    if all_diffs:
+        avg_diffs = torch.stack(all_diffs).mean(dim=0)
+        # Split accumulated and per-layer diffs
+        avg_accumulated_diffs = avg_diffs[:, 0]
+        avg_per_layer_diffs = avg_diffs[:, 1]
 
-        # Add to running sums
-        if accumulated_diffs_sum is None:
-            accumulated_diffs_sum = batch_accumulated_diffs
-            per_layer_diffs_sum = batch_per_layer_diffs
-        else:
-            accumulated_diffs_sum += batch_accumulated_diffs
-            per_layer_diffs_sum += batch_per_layer_diffs
+        # Create plots
+        plots = create_logit_diff_plots(
+            avg_accumulated_diffs,
+            avg_per_layer_diffs,
+            token_pairs_names,
+            layer_names
+        )
+        return plots
 
-        n_valid_batches += 1
-
-        # Clear cache to free memory
-        del cache
-        if t.cuda.is_available():
-            t.cuda.empty_cache()
-
-    # Calculate averages
-    avg_accumulated_diffs = accumulated_diffs_sum / n_valid_batches
-    avg_per_layer_diffs = per_layer_diffs_sum / n_valid_batches
-
-    # Create plots
-    plots = create_logit_diff_plots(
-        avg_accumulated_diffs,
-        avg_per_layer_diffs,
-        token_pairs_names,
-        labels
-    )
-
-    return plots
-
-def residual_stack_to_logit_diff(
-    residual_stack: Float[Tensor, "... batch d_model"],  # noqa: F722
-    cache: ActivationCache,
-    logit_diff_directions: Float[Tensor, "batch d_model"],  # noqa: F722
-) -> Float[Tensor, "..."]:
-    """Calculate logit differences from residual stack."""
-    scaled_residual_stream = cache.apply_ln_to_stack(
-        residual_stack, layer=-1, pos_slice=-1
-    )
-    logit_diff_directions = logit_diff_directions.to(
-        dtype=scaled_residual_stream.dtype
-    ).to('cpu')
-
-    batch_size = residual_stack.size(-2)
-    avg_logit_diff = einops.einsum(
-        scaled_residual_stream,
-        logit_diff_directions,
-        "... batch d_model, batch d_model -> ..."
-    ) / batch_size
-    return avg_logit_diff
+    return "Error: No valid results to plot"
 
 def create_logit_diff_plots(
     accumulated_diffs: Tensor,

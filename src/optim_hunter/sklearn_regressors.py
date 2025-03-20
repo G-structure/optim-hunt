@@ -37,6 +37,7 @@ from optim_hunter.utils import prepare_prompt
 from optim_hunter.LR_methods import RegressionResults
 
 import numpy.typing as npt
+import torch
 
 def create_llm_regressor(
     model: HookedTransformer,
@@ -84,6 +85,18 @@ def create_llm_regressor(
         start_fit = time.time()
 
         # Generate prediction
+        prompt_tensor = model.to_tokens(prompt, prepend_bos=True)
+        with torch.no_grad():
+            outputs = model(prompt_tensor)
+            # Get the next token probabilities (last position in sequence)
+            next_token_logits = outputs[0, -1, :]
+            # Get top token ID and its probability
+            first_token_id = torch.argmax(next_token_logits).item()
+            first_token_prob = torch.softmax(next_token_logits, dim=0)[first_token_id].item()
+            # Convert to string for display
+            first_token_str = model.tokenizer.decode(first_token_id)
+
+        # Also get the full text prediction
         pred_text = str(model.generate(
             prompt,
             max_new_tokens=max_new_tokens,
@@ -116,7 +129,11 @@ def create_llm_regressor(
             y_train=y_train,
             y_test=y_test,
             y_predict=y_pred,
-            intermediates=None  # No intermediate results for LLM
+            intermediates={
+                "first_token_id": first_token_id,
+                "first_token_str": first_token_str,
+                "first_token_prob": first_token_prob
+            }  # Store token information in intermediates
         )
 
         # Add metadata

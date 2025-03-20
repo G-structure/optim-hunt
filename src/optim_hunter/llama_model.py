@@ -42,7 +42,7 @@ def load_llama_model(
     hf_model: Any = AutoModelForCausalLM.from_pretrained(
         model_path,
         low_cpu_mem_usage=True,
-        #quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        # quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         #torch_dtype = t.float32,
         #device_map = "cuda:0"
     )
@@ -53,7 +53,7 @@ def load_llama_model(
         model_type,
         hf_model=hf_model,
         device="cuda",
-        n_devices=2,
+        n_devices=1,
         fold_ln=True,
         # fold_value_biases=False,
         center_writing_weights=True,
