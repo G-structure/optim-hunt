@@ -142,9 +142,6 @@ And get this - when von Oswald et al. actually trained toy transformers, they fo
 2. Internal activations that track optimization progress
 3. Performance scaling with depth like iterative optimization
 
-#todo fix
-This helps explain one of the weirdest things about transformers - how they can do few-shot learning despite only being trained to predict next tokens. They're secretly learning to be optimizers! I think this is one of the coolest examples of mesa optimization we've found in the wild.
-
 ## Langue Models as Regressors
 
 For linear regression, given a design matrix \(X\) and outputs \(y\), there are two really fascinating ways to find the optimal weights - I think walking through both helps build intuition for what's going on under the hood:
@@ -193,7 +190,7 @@ This is what makes nonlinear regression such an interesting test case for unders
 
 ## Llama-8b
 
-Let's investigate how well the model can perform regression tasks by testing it on a fascinating benchmark - the modified Friedman #2 dataset. It's a really cool synthetic regression problem that forces the model to learn both linear and non-linear relationships (and importantly, shouldn't be something it saw in training!). The target function is pretty gnarly:
+Let's investigate how well the model can perform regression tasks by testing it on this benchmark - the modified Friedman #2 dataset. It's a really cool synthetic regression problem that forces the model to learn both linear and non-linear relationships (and importantly, shouldn't be something it saw in training!). The target function is pretty gnarly:
 
 \[
 y = \left(x_1^2 + \left(x_2 x_3 - \frac{1}{x_2 x_4}\right)^2\right)^{1/2}
@@ -201,7 +198,7 @@ y = \left(x_1^2 + \left(x_2 x_3 - \frac{1}{x_2 x_4}\right)^2\right)^{1/2}
 
 This makes for a pretty great test case for a few reasons:
 1. We know exactly what function we want the model to learn (unlike with most real-world data)
-2. The function has both linear and non-linear terms mixed together in a pretty dramatic way
+2. The function has both linear and non-linear terms mixed together
 
 ### Experimental Setup
 
